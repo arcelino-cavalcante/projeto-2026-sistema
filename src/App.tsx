@@ -50,16 +50,31 @@ import AlmoxarifadoCadastros from "./pages/AlmoxarifadoCadastros";
 import AlmoxarifadoAgendamentos from "./pages/AlmoxarifadoAgendamentos";
 
 import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
+import { hydrateLocalStorageFromFirebase } from "./services/firebaseService";
+import { setSyncingFlag } from "./services/firebaseSync";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <HashRouter>
-        <Routes>
+const App = () => {
+  useEffect(() => {
+    // Hidratar os dados em background sempre que o app carregar/recarregar
+    const runHydration = async () => {
+      setSyncingFlag(true);
+      await hydrateLocalStorageFromFirebase();
+      setSyncingFlag(false);
+      console.log("[FirebaseSync] Banco de dados em nuvem sincronizado em segundo plano!");
+    };
+    runHydration();
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <HashRouter>
+          <Routes>
           {/* Default Route redirects to login */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           
@@ -121,6 +136,7 @@ const App = () => (
       </HashRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
