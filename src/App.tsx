@@ -47,6 +47,7 @@ import AdminCadastroCoordenadores from "./pages/AdminCadastroCoordenadores";
 // Almoxarifado Pages
 import AlmoxarifadoDashboard from "./pages/AlmoxarifadoDashboard";
 import AlmoxarifadoCadastros from "./pages/AlmoxarifadoCadastros";
+import AlmoxarifadoAgendamentos from "./pages/AlmoxarifadoAgendamentos";
 
 import NotFound from "./pages/NotFound";
 
@@ -110,6 +111,7 @@ const App = () => (
             <Route path="dashboard" element={<AlmoxarifadoDashboard />} />
             <Route path="pedagogico" element={<AlmoxarifadoEstoque categoria="pedagogico" />} />
             <Route path="nao-pedagogico" element={<AlmoxarifadoEstoque categoria="nao_pedagogico" />} />
+            <Route path="agendamentos" element={<AlmoxarifadoAgendamentos />} />
             <Route path="cadastros" element={<AlmoxarifadoCadastros />} />
           </Route>
 

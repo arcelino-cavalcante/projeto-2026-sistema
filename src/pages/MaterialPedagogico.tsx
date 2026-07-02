@@ -118,7 +118,7 @@ export default function MaterialPedagogico() {
     }
 
     // Carregar reservas existentes
-    const salvas = localStorage.getItem("equipamentos_reservas");
+    const salvas = localStorage.getItem("agendamentos_equipamentos");
     if (salvas) {
       setReservas(JSON.parse(salvas));
     }
@@ -243,7 +243,7 @@ export default function MaterialPedagogico() {
 
     const atualizadas = [...reservas, ...novasReservas];
     setReservas(atualizadas);
-    localStorage.setItem("equipamentos_reservas", JSON.stringify(atualizadas));
+    localStorage.setItem("agendamentos_equipamentos", JSON.stringify(atualizadas));
     setModalOpen(false);
     toast.success("Reserva(s) realizada(s) com sucesso!");
   };

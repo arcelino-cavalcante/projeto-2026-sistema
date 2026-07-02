@@ -5,6 +5,7 @@ import {
   Layers,
   FolderPlus,
   LogOut,
+  Calendar,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,6 +34,11 @@ const items = [
     title: "Materiais Não Pedagógicos",
     url: "/almoxarifado/nao-pedagogico",
     icon: Layers,
+  },
+  {
+    title: "Agendamentos",
+    url: "/almoxarifado/agendamentos",
+    icon: Calendar,
   },
   {
     title: "Cadastros",
