@@ -51,21 +51,28 @@ export default function AlmoxarifadoAgendamentos() {
 
   // Filtragem dos agendamentos
   const agendamentosFiltrados = agendamentos.filter((a) => {
-    const matchEquip = filterEquipamento === "todos" || a.equipamento === filterEquipamento;
+    if (!a) return false;
+    const equipamento = a.equipamento || "";
+    const data = a.data || "";
+    const profNome = a.profNome || "";
+    const etapaNome = a.etapaNome || "";
+
+    const matchEquip = filterEquipamento === "todos" || equipamento === filterEquipamento;
     
-    // Converter data para comparação
-    const matchData = !filterData || a.data === filterData;
+    const matchData = !filterData || data === filterData;
     
     const matchProf = !filterProf.trim() || 
-      a.profNome.toLowerCase().includes(filterProf.toLowerCase()) ||
-      a.etapaNome.toLowerCase().includes(filterProf.toLowerCase());
+      profNome.toLowerCase().includes(filterProf.toLowerCase()) ||
+      etapaNome.toLowerCase().includes(filterProf.toLowerCase());
 
     return matchEquip && matchData && matchProf;
   });
 
   // Ordenar por data mais recente primeiro
   const agendamentosOrdenados = [...agendamentosFiltrados].sort((a, b) => {
-    return new Date(b.data).getTime() - new Date(a.data).getTime();
+    const dateA = a?.data ? new Date(a.data).getTime() : 0;
+    const dateB = b?.data ? new Date(b.data).getTime() : 0;
+    return dateB - dateA;
   });
 
   const getTurnoBadge = (turno: string) => {
