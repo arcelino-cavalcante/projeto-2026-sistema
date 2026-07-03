@@ -17,7 +17,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Calendar as CalendarIcon, HardDrive, Plus, Check, ChevronLeft, ChevronRight, Clock } from "lucide-react";
-import { uploadFileToStorage } from "../services/firebaseService";
+import { uploadFileToStorage, addDocument } from "../services/firebaseService";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 interface Reserva {
   id: string;
@@ -96,33 +97,41 @@ export default function MaterialPedagogico() {
     ],
   };
 
+  // Carregar dados em tempo real do Firestore
+  const { data: etapasDB } = useFirestoreCollection<any>("etapas");
+  const { data: turmasDB } = useFirestoreCollection<any>("turmas");
+  const { data: agendamentosDB } = useFirestoreCollection<Reserva>("agendamentos");
+
   useEffect(() => {
     // Carregar dados de sessão
     const sessao = localStorage.getItem("sessao_usuario");
     if (sessao) {
       const prof = JSON.parse(sessao);
       setProfessor(prof);
-
-      // Carregar turmas vinculadas ao prof
-      const todasTurmas = JSON.parse(localStorage.getItem("coordenacao_turmas") || "[]");
-      const turmasFiltradas = todasTurmas.filter((t: any) => prof.etapaIds?.includes(t.etapaId));
-      setTurmas(turmasFiltradas);
-
-      // Carregar todas as etapas
-      const todasEtapas = JSON.parse(localStorage.getItem("coordenacao_etapas") || "[]");
-      const etapasFiltradas = todasEtapas.filter((e: any) => prof.etapaIds?.includes(e.id));
-      setEtapas(etapasFiltradas);
-      if (etapasFiltradas.length > 0) {
-        setSelectedEtapaId(etapasFiltradas[0].id);
-      }
-    }
-
-    // Carregar reservas existentes
-    const salvas = localStorage.getItem("agendamentos_equipamentos");
-    if (salvas) {
-      setReservas(JSON.parse(salvas));
     }
   }, []);
+
+  useEffect(() => {
+    if (professor) {
+      if (turmasDB) {
+        const turmasFiltradas = turmasDB.filter((t: any) => professor.etapaIds?.includes(t.etapaId));
+        setTurmas(turmasFiltradas);
+      }
+      if (etapasDB) {
+        const etapasFiltradas = etapasDB.filter((e: any) => professor.etapaIds?.includes(e.id));
+        setEtapas(etapasFiltradas);
+        if (etapasFiltradas.length > 0 && !selectedEtapaId) {
+          setSelectedEtapaId(etapasFiltradas[0].id);
+        }
+      }
+    }
+  }, [professor, etapasDB, turmasDB]);
+
+  useEffect(() => {
+    if (agendamentosDB) {
+      setReservas(agendamentosDB);
+    }
+  }, [agendamentosDB]);
 
   // Calcular datas da semana com base no offset
   const getWeekDates = () => {
@@ -206,7 +215,7 @@ export default function MaterialPedagogico() {
     return null;
   };
 
-  const confirmReserva = () => {
+  const confirmReserva = async () => {
     if (!selectedDayInfo || selectedAulas.length === 0 || selectedEquipamentos.length === 0 || !selectedEtapaId) {
       toast.error("Preencha todos os dados e selecione pelo menos um equipamento.");
       return;
@@ -215,7 +224,7 @@ export default function MaterialPedagogico() {
     const etapa = etapas.find(e => e.id === selectedEtapaId);
 
     // Criar registros para cada combinação de aula e equipamento selecionados
-    const novasReservas: Reserva[] = [];
+    const novasReservas: any[] = [];
     
     // Validar se algum equipamento foi reservado por outro professor enquanto o modal estava aberto
     for (const equip of selectedEquipamentos) {
@@ -229,7 +238,6 @@ export default function MaterialPedagogico() {
     selectedAulas.forEach(aula => {
       selectedEquipamentos.forEach(equip => {
         novasReservas.push({
-          id: `${Date.now()}-${aula}-${equip}`,
           data: selectedDayInfo.dateString,
           equipamento: equip,
           turno: currentTurno,
@@ -241,11 +249,16 @@ export default function MaterialPedagogico() {
       });
     });
 
-    const atualizadas = [...reservas, ...novasReservas];
-    setReservas(atualizadas);
-    localStorage.setItem("agendamentos_equipamentos", JSON.stringify(atualizadas));
-    setModalOpen(false);
-    toast.success("Reserva(s) realizada(s) com sucesso!");
+    try {
+      for (const res of novasReservas) {
+        await addDocument("agendamentos", res);
+      }
+      setModalOpen(false);
+      toast.success("Reserva(s) realizada(s) com sucesso!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao registrar agendamentos.");
+    }
   };
 
   // Solicitação de materiais
@@ -274,8 +287,7 @@ export default function MaterialPedagogico() {
         fileUrl = await uploadFileToStorage(planoFile, "projetos");
       }
 
-      const novaSolicitacao: SolicitacaoMaterial = {
-        id: Date.now().toString(),
+      const novaSolicitacao = {
         profId: professor?.id || "unknown",
         profNome: professor?.nome || "Professor",
         turmaNomes: nomesTurmasSelecionadas,
@@ -283,10 +295,10 @@ export default function MaterialPedagogico() {
         fileName: fileUrl, // URL de download seguro
         materiais: materiaisLista,
         dataSolicitacao: new Date().toLocaleDateString("pt-BR"),
+        status: "pendente"
       };
 
-      const salvas = JSON.parse(localStorage.getItem("solicitacoes_materiais") || "[]");
-      localStorage.setItem("solicitacoes_materiais", JSON.stringify([...salvas, novaSolicitacao]));
+      await addDocument("solicitacoes_materiais", novaSolicitacao);
 
       setSelectedTurmaIds([]);
       setNomeProjeto("");

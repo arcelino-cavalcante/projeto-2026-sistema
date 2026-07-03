@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Link2, FileText, ExternalLink, Calendar, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
+import { useFirestoreCollection } from "../hooks/useFirestore";
+
 interface InfoLink {
   id: string;
   tipo: "link" | "dado";
@@ -12,15 +14,8 @@ interface InfoLink {
 }
 
 export default function ProfessorDadosImportantes() {
-  const [items, setItems] = useState<InfoLink[]>([]);
+  const { data: items } = useFirestoreCollection<InfoLink>("coordenacao_info_links");
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("coordenacao_info_links");
-    if (saved) {
-      setItems(JSON.parse(saved));
-    }
-  }, []);
 
   const filteredItems = items.filter(
     item =>

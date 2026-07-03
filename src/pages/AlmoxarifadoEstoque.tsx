@@ -19,6 +19,12 @@ import {
 import { toast } from "sonner";
 import { Package, Plus, Minus, AlertTriangle, Check, History, Layers, ClipboardList, TrendingUp } from "lucide-react";
 
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { addDocument } from "../services/firebaseService";
+import { db } from "../firebase";
+
+
 interface ItemEstoque {
   id: string;
   nome: string;
@@ -59,14 +65,15 @@ interface Props {
 }
 
 export default function AlmoxarifadoEstoque({ categoria }: Props) {
-  const [itens, setItens] = useState<ItemEstoque[]>([]);
-  const [logs, setLogs] = useState<LogTransacao[]>([]);
-  const [solicitacoesMateriais, setSolicitacoesMateriais] = useState<MaterialRequest[]>([]);
-
-  // Dados Auxiliares
-  const [etapas, setEtapas] = useState<any[]>([]);
-  const [professores, setProfessores] = useState<any[]>([]);
-  const [turmas, setTurmas] = useState<any[]>([]);
+  
+  const { data: itensRaw } = useFirestoreCollection<ItemEstoque>("escola_estoque_itens");
+  const itens = itensRaw.filter(i => i.categoria === categoria);
+  const { data: logsRaw } = useFirestoreCollection<LogTransacao>("escola_estoque_logs");
+  const logs = logsRaw.filter(l => l.categoria === categoria);
+  const { data: solicitacoesMateriais } = useFirestoreCollection<MaterialRequest>("solicitacoes_materiais");
+  const { data: etapas } = useFirestoreCollection<any>("etapas");
+  const { data: professores } = useFirestoreCollection<any>("professores");
+  const { data: turmas } = useFirestoreCollection<any>("turmas");
 
   // Dialog Entrada
   const [entradaOpen, setEntradaOpen] = useState(false);
@@ -83,64 +90,19 @@ export default function AlmoxarifadoEstoque({ categoria }: Props) {
   // Mapeamento de itemID -> qtd retirada
   const [materiaisRetirados, setMateriaisRetirados] = useState<Record<string, { selecionado: boolean; qtd: string }>>({});
 
-  const loadData = () => {
-    // 1. Carregar itens
-    const savedItens = localStorage.getItem("escola_estoque_itens");
-    const defaultItens = [
-      { id: "1", nome: "Papel A4", categoria: "pedagogico", qtdAtual: 10000, qtdMax: 10000, unidade: "Folhas" },
-      { id: "2", nome: "Toner Preto", categoria: "pedagogico", qtdAtual: 100, qtdMax: 100, unidade: "%" },
-      { id: "3", nome: "Toner Garrafas (Reserva)", categoria: "pedagogico", qtdAtual: 5, qtdMax: 5, unidade: "Unidades" },
-      { id: "4", nome: "Cartolina", categoria: "pedagogico", qtdAtual: 150, qtdMax: 150, unidade: "Unidades" },
-      { id: "5", nome: "Cola Branca", categoria: "pedagogico", qtdAtual: 30, qtdMax: 30, unidade: "Unidades" },
-      { id: "6", nome: "Copo Descartável", categoria: "nao_pedagogico", qtdAtual: 500, qtdMax: 500, unidade: "Unidades" },
-      { id: "7", nome: "Detergente Líquido", categoria: "nao_pedagogico", qtdAtual: 10, qtdMax: 10, unidade: "Litros" },
-      { id: "8", nome: "Papel Toalha", categoria: "nao_pedagogico", qtdAtual: 50, qtdMax: 50, unidade: "Rolos" }
-    ];
-    
-    const loadedItens = savedItens ? JSON.parse(savedItens) : defaultItens;
-    if (!savedItens) {
-      localStorage.setItem("escola_estoque_itens", JSON.stringify(defaultItens));
-    }
-    
-    const filtrados = loadedItens.filter((i: ItemEstoque) => i.categoria === categoria);
-    setItens(filtrados);
-    if (filtrados.length > 0) {
-      setSelectedItemId(filtrados[0].id);
-    }
-
-    // Inicializar estado de retirada
-    const initialRetiradas: Record<string, { selecionado: boolean; qtd: string }> = {};
-    filtrados.forEach((i: ItemEstoque) => {
-      initialRetiradas[i.id] = { selecionado: false, qtd: "" };
-    });
-    setMateriaisRetirados(initialRetiradas);
-
-    // 2. Carregar logs
-    const savedLogs = localStorage.getItem("escola_estoque_logs");
-    const loadedLogs = savedLogs ? JSON.parse(savedLogs) : [];
-    setLogs(loadedLogs.filter((l: LogTransacao) => l.categoria === categoria));
-
-    // 3. Carregar solicitações de materiais
-    const savedReqs = localStorage.getItem("solicitacoes_materiais");
-    if (savedReqs) {
-      setSolicitacoesMateriais(JSON.parse(savedReqs));
-    }
-
-    // 4. Carregar etapas, profs, turmas
-    const loadedEtapas = JSON.parse(localStorage.getItem("coordenacao_etapas") || "[]");
-    setEtapas(loadedEtapas);
-    if (loadedEtapas.length > 0) {
-      setSelectedEtapaId(loadedEtapas[0].id);
-    }
-    setProfessores(JSON.parse(localStorage.getItem("coordenacao_professores") || "[]"));
-    setTurmas(JSON.parse(localStorage.getItem("coordenacao_turmas") || "[]"));
-  };
-
   useEffect(() => {
-    loadData();
-  }, [categoria]);
+    if (itens.length > 0 && !selectedItemId) {
+      setSelectedItemId(itens[0].id);
+    }
+    const initialRetiradas: Record<string, { selecionado: boolean; qtd: string }> = {};
+    itens.forEach((i: ItemEstoque) => {
+      if (!materiaisRetirados[i.id]) {
+        initialRetiradas[i.id] = { selecionado: false, qtd: "" };
+      }
+    });
+    setMateriaisRetirados(prev => ({...initialRetiradas, ...prev}));
+  }, [itens, categoria]);
 
-  // Filtrar turmas e professores pela etapa selecionada na retirada
   const turmasFiltradas = turmas.filter(t => t.etapaId === selectedEtapaId);
   const professoresFiltrados = professores.filter(p => p.etapaIds?.includes(selectedEtapaId));
 
@@ -157,7 +119,7 @@ export default function AlmoxarifadoEstoque({ categoria }: Props) {
     }
   }, [selectedEtapaId, etapas]);
 
-  const handleEntradaEstoque = (e: React.FormEvent) => {
+  const handleEntradaEstoque = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = Number(entradaQtd);
     if (!val || val <= 0) {
@@ -165,46 +127,39 @@ export default function AlmoxarifadoEstoque({ categoria }: Props) {
       return;
     }
 
-    const savedItens = localStorage.getItem("escola_estoque_itens");
-    if (!savedItens) return;
-
-    const listCompleta: ItemEstoque[] = JSON.parse(savedItens);
-    const itemAlvo = listCompleta.find(i => i.id === selectedItemId);
+    const itemAlvo = itensRaw.find(i => i.id === selectedItemId);
     if (!itemAlvo) return;
 
-    itemAlvo.qtdAtual = Math.min(itemAlvo.qtdMax, itemAlvo.qtdAtual + val);
-    localStorage.setItem("escola_estoque_itens", JSON.stringify(listCompleta));
+    try {
+      await updateDoc(doc(db, "escola_estoque_itens", itemAlvo.id), {
+        qtdAtual: Math.min(itemAlvo.qtdMax, itemAlvo.qtdAtual + val)
+      });
 
-    const savedLogs = localStorage.getItem("escola_estoque_logs");
-    const loadedLogs = savedLogs ? JSON.parse(savedLogs) : [];
+      await addDocument("escola_estoque_logs", {
+        data: new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        itemId: itemAlvo.id,
+        itemName: itemAlvo.nome,
+        qtd: val,
+        tipo: "entrada",
+        obs: entradaObs.trim() || "Entrada manual de insumos",
+        categoria: itemAlvo.categoria
+      });
 
-    const newLog: LogTransacao = {
-      id: Date.now().toString(),
-      data: new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      itemId: itemAlvo.id,
-      itemName: itemAlvo.nome,
-      qtd: val,
-      tipo: "entrada",
-      obs: entradaObs.trim() || "Entrada manual de insumos",
-      categoria: itemAlvo.categoria
-    };
-
-    localStorage.setItem("escola_estoque_logs", JSON.stringify([newLog, ...loadedLogs]));
-
-    setEntradaQtd("");
-    setEntradaObs("");
-    setEntradaOpen(false);
-    toast.success(`Abastecimento de ${itemAlvo.nome} registrado!`);
-    loadData();
+      setEntradaQtd("");
+      setEntradaObs("");
+      setEntradaOpen(false);
+      toast.success(`Abastecimento de ${itemAlvo.nome} registrado!`);
+    } catch (error) {
+      toast.error("Erro ao registrar entrada.");
+    }
   };
 
-  const handleRegistrarSaida = (e: React.FormEvent) => {
+  const handleRegistrarSaida = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Obter dados de Etapa, Professor e Turma para o histórico
-    const etapa = etapas.find(et => et.id === selectedEtapaId);
-    const prof = professores.find(pr => pr.id === selectedProfId);
-    const turma = turmas.find(tr => tr.id === selectedTurmaId);
+    const etapa = etapas.find((et: any) => et.id === selectedEtapaId);
+    const prof = professores.find((pr: any) => pr.id === selectedProfId);
+    const turma = turmas.find((tr: any) => tr.id === selectedTurmaId);
 
     if (!etapa || !prof || !turma) {
       toast.error("Por favor, selecione Etapa, Professor e Turma.");
@@ -220,16 +175,11 @@ export default function AlmoxarifadoEstoque({ categoria }: Props) {
       return;
     }
 
-    const savedItens = localStorage.getItem("escola_estoque_itens");
-    if (!savedItens) return;
-
-    const listCompleta: ItemEstoque[] = JSON.parse(savedItens);
-    const logsNovos: LogTransacao[] = [];
     const dataAtual = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
     // Validar limites antes de salvar
     for (const [id, val] of itensSelecionados) {
-      const itemAlvo = listCompleta.find(i => i.id === id);
+      const itemAlvo = itensRaw.find(i => i.id === id);
       const qtdSaida = Number(val.qtd);
       if (!itemAlvo) continue;
 
@@ -239,43 +189,40 @@ export default function AlmoxarifadoEstoque({ categoria }: Props) {
       }
     }
 
-    // Aplicar saídas
-    for (const [id, val] of itensSelecionados) {
-      const itemAlvo = listCompleta.find(i => i.id === id);
-      const qtdSaida = Number(val.qtd);
-      if (!itemAlvo) continue;
+    try {
+      for (const [id, val] of itensSelecionados) {
+        const itemAlvo = itensRaw.find(i => i.id === id);
+        const qtdSaida = Number(val.qtd);
+        if (!itemAlvo) continue;
 
-      itemAlvo.qtdAtual = Math.max(0, itemAlvo.qtdAtual - qtdSaida);
+        const novaQtd = Math.max(0, itemAlvo.qtdAtual - qtdSaida);
+        await updateDoc(doc(db, "escola_estoque_itens", itemAlvo.id), {
+          qtdAtual: novaQtd
+        });
 
-      logsNovos.push({
-        id: Date.now().toString() + "-" + id,
-        data: dataAtual,
-        itemId: itemAlvo.id,
-        itemName: itemAlvo.nome,
-        qtd: -qtdSaida,
-        tipo: "saida",
-        obs: `Retirada direta de material para a turma ${turma.nome}`,
-        categoria: itemAlvo.categoria,
-        etapaNome: etapa.nome,
-        profNome: prof.nome,
-        turmaNome: `${turma.nome} (${etapa.nome})`
-      });
+        await addDocument("escola_estoque_logs", {
+          data: dataAtual,
+          itemId: itemAlvo.id,
+          itemName: itemAlvo.nome,
+          qtd: -qtdSaida,
+          tipo: "saida",
+          obs: `Retirada direta de material para a turma ${turma.nome}`,
+          categoria: itemAlvo.categoria,
+          etapaNome: etapa.nome,
+          profNome: prof.nome,
+          turmaNome: `${turma.nome} (${etapa.nome})`
+        });
 
-      // Validar limite crítico
-      if (itemAlvo.qtdAtual <= itemAlvo.qtdMax * 0.15) {
-        toast.warning(`ATENÇÃO: O item ${itemAlvo.nome} atingiu nível crítico (menos de 15% em estoque)!`);
+        if (novaQtd <= itemAlvo.qtdMax * 0.15) {
+          toast.warning(`ATENÇÃO: O item ${itemAlvo.nome} atingiu nível crítico (menos de 15% em estoque)!`);
+        }
       }
+
+      setSaidaOpen(false);
+      toast.success("Retirada registrada com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao registrar retirada.");
     }
-
-    localStorage.setItem("escola_estoque_itens", JSON.stringify(listCompleta));
-
-    const savedLogs = localStorage.getItem("escola_estoque_logs");
-    const loadedLogs = savedLogs ? JSON.parse(savedLogs) : [];
-    localStorage.setItem("escola_estoque_logs", JSON.stringify([...logsNovos, ...loadedLogs]));
-
-    setSaidaOpen(false);
-    toast.success("Retirada registrada com sucesso!");
-    loadData();
   };
 
   const handleToggleMaterial = (id: string, checked: boolean) => {
@@ -292,12 +239,7 @@ export default function AlmoxarifadoEstoque({ categoria }: Props) {
     }));
   };
 
-  const handleEntregarMateriais = (req: MaterialRequest) => {
-    const savedItens = localStorage.getItem("escola_estoque_itens");
-    if (!savedItens) return;
-
-    const listCompleta: ItemEstoque[] = JSON.parse(savedItens);
-    const logsNovos: LogTransacao[] = [];
+  const handleEntregarMateriais = async (req: MaterialRequest) => {
     const dataAtual = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
     let cartolinasQtd = 2;
@@ -310,54 +252,52 @@ export default function AlmoxarifadoEstoque({ categoria }: Props) {
     const colaMatch = desc.match(/(\d+)\s*cola/);
     if (colaMatch) colasQtd = Number(colaMatch[1]);
 
-    const cartolinaItem = listCompleta.find(i => i.nome.toLowerCase().includes("cartolina"));
-    const colaItem = listCompleta.find(i => i.nome.toLowerCase().includes("cola"));
+    const cartolinaItem = itensRaw.find(i => i.nome.toLowerCase().includes("cartolina"));
+    const colaItem = itensRaw.find(i => i.nome.toLowerCase().includes("cola"));
 
-    if (cartolinaItem) {
-      cartolinaItem.qtdAtual = Math.max(0, cartolinaItem.qtdAtual - cartolinasQtd);
-      logsNovos.push({
-        id: Date.now().toString() + "-cart",
-        data: dataAtual,
-        itemId: cartolinaItem.id,
-        itemName: cartolinaItem.nome,
-        qtd: -cartolinasQtd,
-        tipo: "saida",
-        obs: `Entrega para projeto: "${req.projetoNome}" (${req.profNome})`,
-        categoria: "pedagogico",
-        profNome: req.profNome,
-        turmaNome: req.turmas.join(", ")
+    try {
+      if (cartolinaItem) {
+        await updateDoc(doc(db, "escola_estoque_itens", cartolinaItem.id), {
+          qtdAtual: Math.max(0, cartolinaItem.qtdAtual - cartolinasQtd)
+        });
+        await addDocument("escola_estoque_logs", {
+          data: dataAtual,
+          itemId: cartolinaItem.id,
+          itemName: cartolinaItem.nome,
+          qtd: -cartolinasQtd,
+          tipo: "saida",
+          obs: `Entrega para projeto: "${req.projetoNome}" (${req.profNome})`,
+          categoria: "pedagogico",
+          profNome: req.profNome,
+          turmaNome: req.turmas.join(", ")
+        });
+      }
+
+      if (colaItem) {
+        await updateDoc(doc(db, "escola_estoque_itens", colaItem.id), {
+          qtdAtual: Math.max(0, colaItem.qtdAtual - colasQtd)
+        });
+        await addDocument("escola_estoque_logs", {
+          data: dataAtual,
+          itemId: colaItem.id,
+          itemName: colaItem.nome,
+          qtd: -colasQtd,
+          tipo: "saida",
+          obs: `Entrega para projeto: "${req.projetoNome}" (${req.profNome})`,
+          categoria: "pedagogico",
+          profNome: req.profNome,
+          turmaNome: req.turmas.join(", ")
+        });
+      }
+
+      await updateDoc(doc(db, "solicitacoes_materiais", req.id), {
+        status: "entregue"
       });
+
+      toast.success(`Materiais entregues! Dedução: ${cartolinasQtd} cartolinas e ${colasQtd} colas.`);
+    } catch (error) {
+      toast.error("Erro ao registrar entrega.");
     }
-
-    if (colaItem) {
-      colaItem.qtdAtual = Math.max(0, colaItem.qtdAtual - colasQtd);
-      logsNovos.push({
-        id: Date.now().toString() + "-cola",
-        data: dataAtual,
-        itemId: colaItem.id,
-        itemName: colaItem.nome,
-        qtd: -colasQtd,
-        tipo: "saida",
-        obs: `Entrega para projeto: "${req.projetoNome}" (${req.profNome})`,
-        categoria: "pedagogico",
-        profNome: req.profNome,
-        turmaNome: req.turmas.join(", ")
-      });
-    }
-
-    localStorage.setItem("escola_estoque_itens", JSON.stringify(listCompleta));
-
-    const savedLogs = localStorage.getItem("escola_estoque_logs");
-    const loadedLogs = savedLogs ? JSON.parse(savedLogs) : [];
-    localStorage.setItem("escola_estoque_logs", JSON.stringify([...logsNovos, ...loadedLogs]));
-
-    const todasReqs = solicitacoesMateriais.map(r =>
-      r.id === req.id ? { ...r, status: "entregue" as const } : r
-    );
-    localStorage.setItem("solicitacoes_materiais", JSON.stringify(todasReqs));
-
-    toast.success(`Materiais entregues! Dedução: ${cartolinasQtd} cartolinas e ${colasQtd} colas.`);
-    loadData();
   };
 
   const getPercent = (curr: number, max: number) => {

@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Clock, FileText, Check, Users } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, updateDoc } from "firebase/firestore";
+import { addDocument } from "../services/firebaseService";
+import { db } from "../firebase";
 
 interface Solicitacao {
   id: string;
@@ -22,78 +26,73 @@ interface Solicitacao {
 }
 
 export default function FilaImpressao() {
-  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
+  const { data: solicitacoes } = useFirestoreCollection<Solicitacao>("xerox_solicitacoes");
+  const { data: itensEstoque } = useFirestoreCollection<any>("escola_estoque_itens");
 
-  useEffect(() => {
-    const salvas = localStorage.getItem("xerox_solicitacoes");
-    if (salvas) {
-      setSolicitacoes(JSON.parse(salvas));
-    }
-  }, []);
-
-  const saveSolicitacoes = (list: Solicitacao[]) => {
-    setSolicitacoes(list);
-    localStorage.setItem("xerox_solicitacoes", JSON.stringify(list));
-  };
-
-  const handleMarcarComoImpresso = (id: string) => {
+  const handleMarcarComoImpresso = async (id: string) => {
     const req = solicitacoes.find(s => s.id === id);
     if (!req) return;
 
-    const atualizadas = solicitacoes.map(s => 
-      s.id === id ? { ...s, status: "impresso" as const } : s
-    );
-    saveSolicitacoes(atualizadas);
+    try {
+      // 1. Atualizar status no Firestore
+      await updateDoc(doc(db, "xerox_solicitacoes", id), {
+        status: "impresso"
+      });
 
-    // Deduzir do estoque de insumos
-    const savedItens = localStorage.getItem("escola_estoque_itens");
-    const defaultItens = [
-      { id: "1", nome: "Papel A4", categoria: "pedagogico", qtdAtual: 10000, qtdMax: 10000, unidade: "Folhas" },
-      { id: "2", nome: "Toner Preto", categoria: "pedagogico", qtdAtual: 100, qtdMax: 100, unidade: "%" },
-      { id: "3", nome: "Toner Garrafas (Reserva)", categoria: "pedagogico", qtdAtual: 5, qtdMax: 5, unidade: "Unidades" },
-      { id: "4", nome: "Cartolina", categoria: "pedagogico", qtdAtual: 150, qtdMax: 150, unidade: "Unidades" },
-      { id: "5", nome: "Cola Branca", categoria: "pedagogico", qtdAtual: 30, qtdMax: 30, unidade: "Unidades" },
-      { id: "6", nome: "Copo Descartável", categoria: "nao_pedagogico", qtdAtual: 500, qtdMax: 500, unidade: "Unidades" },
-      { id: "7", nome: "Detergente Líquido", categoria: "nao_pedagogico", qtdAtual: 10, qtdMax: 10, unidade: "Litros" },
-      { id: "8", nome: "Papel Toalha", categoria: "nao_pedagogico", qtdAtual: 50, qtdMax: 50, unidade: "Rolos" }
-    ];
-    let itens = savedItens ? JSON.parse(savedItens) : defaultItens;
+      // 2. Deduzir do estoque de insumos
+      const defaultItens = [
+        { id: "1", nome: "Papel A4", categoria: "pedagogico", qtdAtual: 10000, qtdMax: 10000, unidade: "Folhas" },
+        { id: "2", nome: "Toner Preto", categoria: "pedagogico", qtdAtual: 100, qtdMax: 100, unidade: "%" },
+        { id: "3", nome: "Toner Garrafas (Reserva)", categoria: "pedagogico", qtdAtual: 5, qtdMax: 5, unidade: "Unidades" },
+        { id: "4", nome: "Cartolina", categoria: "pedagogico", qtdAtual: 150, qtdMax: 150, unidade: "Unidades" },
+        { id: "5", nome: "Cola Branca", categoria: "pedagogico", qtdAtual: 30, qtdMax: 30, unidade: "Unidades" },
+        { id: "6", nome: "Copo Descartável", categoria: "nao_pedagogico", qtdAtual: 500, qtdMax: 500, unidade: "Unidades" },
+        { id: "7", nome: "Detergente Líquido", categoria: "nao_pedagogico", qtdAtual: 10, qtdMax: 10, unidade: "Litros" },
+        { id: "8", nome: "Papel Toalha", categoria: "nao_pedagogico", qtdAtual: 50, qtdMax: 50, unidade: "Rolos" }
+      ];
+      
+      const itens = itensEstoque && itensEstoque.length > 0 ? [...itensEstoque] : defaultItens;
 
-    let papelItem = itens.find((item: any) => item.id === "1" || item.nome.toLowerCase().includes("papel a4"));
-    let tonerItem = itens.find((item: any) => item.id === "2" || item.nome.toLowerCase().includes("toner preto"));
-    let garrafaItem = itens.find((item: any) => item.id === "3" || item.nome.toLowerCase().includes("garrafa"));
+      let papelItem = itens.find((item: any) => item.id === "1" || item.nome.toLowerCase().includes("papel a4"));
+      let tonerItem = itens.find((item: any) => item.id === "2" || item.nome.toLowerCase().includes("toner preto"));
+      let garrafaItem = itens.find((item: any) => item.id === "3" || item.nome.toLowerCase().includes("garrafa"));
 
-    // Reduzir papel A4
-    const papelConsumido = req.copias;
-    if (papelItem) {
-      papelItem.qtdAtual = Math.max(0, papelItem.qtdAtual - papelConsumido);
-    }
+      // Reduzir papel A4
+      const papelConsumido = req.copias;
+      let novaQtdPapel = papelItem ? Math.max(0, papelItem.qtdAtual - papelConsumido) : 0;
 
-    // Reduzir toner ativo (ex: 0.05% por folha)
-    const tonerConsumido = Number((papelConsumido * 0.05).toFixed(2));
-    if (tonerItem) {
-      tonerItem.qtdAtual = Math.max(0, Number((tonerItem.qtdAtual - tonerConsumido).toFixed(2)));
+      // Reduzir toner ativo (ex: 0.05% por folha)
+      const tonerConsumido = Number((papelConsumido * 0.05).toFixed(2));
+      let novaQtdToner = tonerItem ? Math.max(0, Number((tonerItem.qtdAtual - tonerConsumido).toFixed(2))) : 0;
+      let novaQtdGarrafa = garrafaItem ? garrafaItem.qtdAtual : 0;
 
       // Se o toner ativo zerar, usar uma garrafa física reserva se houver
-      if (tonerItem.qtdAtual <= 0 && garrafaItem && garrafaItem.qtdAtual > 0) {
-        garrafaItem.qtdAtual = Math.max(0, garrafaItem.qtdAtual - 1);
-        tonerItem.qtdAtual = 100;
+      if (tonerItem && novaQtdToner <= 0 && garrafaItem && garrafaItem.qtdAtual > 0) {
+        novaQtdGarrafa = Math.max(0, garrafaItem.qtdAtual - 1);
+        novaQtdToner = 100;
         toast.info("Toner ativo esgotado. Nova garrafa de tinta reserva instalada!");
       }
-    }
 
-    localStorage.setItem("escola_estoque_itens", JSON.stringify(itens));
+      if (papelItem) {
+        await updateDoc(doc(db, "escola_estoque_itens", papelItem.id), {
+          qtdAtual: novaQtdPapel
+        });
+      }
+      if (tonerItem) {
+        await updateDoc(doc(db, "escola_estoque_itens", tonerItem.id), {
+          qtdAtual: novaQtdToner
+        });
+      }
+      if (garrafaItem && novaQtdGarrafa !== garrafaItem.qtdAtual) {
+        await updateDoc(doc(db, "escola_estoque_itens", garrafaItem.id), {
+          qtdAtual: novaQtdGarrafa
+        });
+      }
 
-    // Registrar no histórico de transações
-    const savedLogs = localStorage.getItem("escola_estoque_logs");
-    let logsList = savedLogs ? JSON.parse(savedLogs) : [];
-
-    const logId = Date.now().toString();
-    const dataAtual = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    
-    const newLogs = [
-      {
-        id: logId + "-papel",
+      // Registrar no histórico de transações
+      const dataAtual = new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      
+      await addDocument("escola_estoque_logs", {
         data: dataAtual,
         itemId: papelItem?.id || "1",
         itemName: papelItem?.nome || "Papel A4",
@@ -101,9 +100,9 @@ export default function FilaImpressao() {
         tipo: "saida",
         obs: `Impressão da atividade: "${req.fileName}" (${req.profNome})`,
         categoria: "pedagogico"
-      },
-      {
-        id: logId + "-toner",
+      });
+
+      await addDocument("escola_estoque_logs", {
         data: dataAtual,
         itemId: tonerItem?.id || "2",
         itemName: tonerItem?.nome || "Toner Preto",
@@ -111,26 +110,26 @@ export default function FilaImpressao() {
         tipo: "saida",
         obs: `Consumo de toner para atividade: "${req.fileName}"`,
         categoria: "pedagogico"
-      }
-    ];
+      });
 
-    logsList = [...newLogs, ...logsList];
-    localStorage.setItem("escola_estoque_logs", JSON.stringify(logsList));
-
-    // Validar alertas de estoque crítico (15%)
-    if (papelItem) {
-      const papelLimite = Math.floor(papelItem.qtdMax * 0.15);
-      if (papelItem.qtdAtual <= papelLimite) {
-        toast.warning("ALERTA: Estoque de Papel A4 está crítico (abaixo de 15%)!");
+      // Validar alertas de estoque crítico (15%)
+      if (papelItem) {
+        const papelLimite = Math.floor(papelItem.qtdMax * 0.15);
+        if (novaQtdPapel <= papelLimite) {
+          toast.warning("ALERTA: Estoque de Papel A4 está crítico (abaixo de 15%)!");
+        }
       }
+      if (garrafaItem && tonerItem) {
+        if (novaQtdGarrafa <= 0 && novaQtdToner <= 15) {
+          toast.warning("ALERTA: Nível de tinta da impressora está crítico e não há garrafas reserva!");
+        }
+      }
+
+      toast.success("Solicitação de impressão concluída!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao marcar solicitação como impressa.");
     }
-    if (garrafaItem && tonerItem) {
-      if (garrafaItem.qtdAtual <= 0 && tonerItem.qtdAtual <= 15) {
-        toast.warning("ALERTA: Nível de tinta da impressora está crítico e não há garrafas reserva!");
-      }
-    }
-
-    toast.success("Solicitação de impressão concluída!");
   };
 
   const pendentes = solicitacoes

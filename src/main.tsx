@@ -1,8 +1,8 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./globals.css";
-import { setupLocalStorageFirebaseSync } from "./services/firebaseSync";
-
-setupLocalStorageFirebaseSync();
+// Local storage sync is disabled as we are now fully online
+// import { setupLocalStorageFirebaseSync } from "./services/firebaseSync";
+// setupLocalStorageFirebaseSync();
 
 createRoot(document.getElementById("root")!).render(<App />);

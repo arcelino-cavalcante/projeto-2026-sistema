@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Calendar as CalendarIcon, HardDrive, Trash2, CalendarDays, Search, Filter } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, deleteDoc } from "firebase/firestore";
+import { db } from "../firebase";
 
 interface Reserva {
   id: string;
@@ -21,31 +24,20 @@ interface Reserva {
 }
 
 export default function AlmoxarifadoAgendamentos() {
-  const [agendamentos, setAgendamentos] = useState<Reserva[]>([]);
+  const { data: agendamentos } = useFirestoreCollection<Reserva>("agendamentos_equipamentos");
+  
   const [filterEquipamento, setFilterEquipamento] = useState<string>("todos");
   const [filterData, setFilterData] = useState<string>("");
   const [filterProf, setFilterProf] = useState<string>("");
 
-  useEffect(() => {
-    const loadAgendamentos = () => {
-      const salvas = localStorage.getItem("agendamentos_equipamentos");
-      if (salvas) {
-        setAgendamentos(JSON.parse(salvas));
-      }
-    };
-    loadAgendamentos();
-
-    // Adiciona listener para atualizações locais
-    window.addEventListener("storage", loadAgendamentos);
-    return () => window.removeEventListener("storage", loadAgendamentos);
-  }, []);
-
-  const handleDeletarAgendamento = (id: string) => {
+  const handleDeletarAgendamento = async (id: string) => {
     if (confirm("Tem certeza que deseja cancelar esta reserva?")) {
-      const atualizados = agendamentos.filter((a) => a.id !== id);
-      setAgendamentos(atualizados);
-      localStorage.setItem("agendamentos_equipamentos", JSON.stringify(atualizados));
-      toast.success("Agendamento cancelado com sucesso!");
+      try {
+        await deleteDoc(doc(db, "agendamentos_equipamentos", id));
+        toast.success("Agendamento cancelado com sucesso!");
+      } catch (error) {
+        toast.error("Erro ao cancelar agendamento.");
+      }
     }
   };
 

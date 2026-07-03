@@ -8,9 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { ShieldAlert, Award, FileText, Image as ImageIcon, Calendar } from "lucide-react";
-import { uploadFileToStorage } from "../services/firebaseService";
+import { uploadFileToStorage, addDocument } from "../services/firebaseService";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 export default function BancoAtividades() {
+  const { data: todasTurmas } = useFirestoreCollection("turmas");
+  const { data: todasDisciplinas } = useFirestoreCollection("disciplinas");
   const [professor, setProfessor] = useState<any>(null);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [disciplinas, setDisciplinas] = useState<any[]>([]);
@@ -36,23 +39,24 @@ export default function BancoAtividades() {
   useEffect(() => {
     const sessao = localStorage.getItem("sessao_usuario");
     if (sessao) {
-      const prof = JSON.parse(sessao);
-      setProfessor(prof);
-
-      // Filtrar turmas pelas etapas do professor
-      const todasTurmas = JSON.parse(localStorage.getItem("coordenacao_turmas") || "[]");
-      const turmasFiltradas = todasTurmas.filter((t: any) => prof.etapaIds?.includes(t.etapaId));
-      setTurmas(turmasFiltradas);
-
-      // Filtrar disciplinas do professor
-      const todasDisciplinas = JSON.parse(localStorage.getItem("coordenacao_disciplinas") || "[]");
-      const discFiltradas = todasDisciplinas.filter((d: any) => prof.disciplinaIds?.includes(d.id));
-      setDisciplinas(discFiltradas);
+      setProfessor(JSON.parse(sessao));
     }
-
     // Setar data do dia
     setExitosaData(new Date().toLocaleDateString("pt-BR"));
   }, []);
+
+  useEffect(() => {
+    if (professor) {
+      if (todasTurmas) {
+        const turmasFiltradas = todasTurmas.filter((t: any) => professor.etapaIds?.includes(t.etapaId));
+        setTurmas(turmasFiltradas);
+      }
+      if (todasDisciplinas) {
+        const discFiltradas = todasDisciplinas.filter((d: any) => professor.disciplinaIds?.includes(d.id));
+        setDisciplinas(discFiltradas);
+      }
+    }
+  }, [professor, todasTurmas, todasDisciplinas]);
 
   // Handler do arquivo PDF de emergência
   const handleEmergenciaFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,8 +115,7 @@ export default function BancoAtividades() {
         dataEnvio: new Date().toLocaleDateString("pt-BR")
       };
 
-      const salvas = JSON.parse(localStorage.getItem("atividades_emergencia") || "[]");
-      localStorage.setItem("atividades_emergencia", JSON.stringify([...salvas, novaAtividade]));
+      await addDocument("atividades_emergencia", novaAtividade);
 
       setEmergenciaTurmaId("");
       setEmergenciaDisciplinaId("");
@@ -178,8 +181,7 @@ export default function BancoAtividades() {
         files: metadataArquivos
       };
 
-      const salvas = JSON.parse(localStorage.getItem("xerox_atividades_exitosas") || "[]");
-      localStorage.setItem("xerox_atividades_exitosas", JSON.stringify([...salvas, novaPratica]));
+      await addDocument("atividades_exitosas", novaPratica);
 
       setExitosaTurmaId("");
       setExitosaDisciplinaId("");

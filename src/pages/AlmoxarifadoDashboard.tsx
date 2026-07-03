@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Library, Layers, AlertTriangle, History, Inbox } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 export default function AlmoxarifadoDashboard() {
+  const { data: itens } = useFirestoreCollection<any>("escola_estoque_itens");
+  const { data: logs } = useFirestoreCollection<any>("escola_estoque_logs");
+  const { data: solicitacoes } = useFirestoreCollection<any>("solicitacoes_materiais");
+
   const [stats, setStats] = useState({
     pedagogicos: 0,
     naoPedagogicos: 0,
@@ -12,36 +17,12 @@ export default function AlmoxarifadoDashboard() {
   });
 
   useEffect(() => {
-    // 1. Carregar itens
-    const savedItens = localStorage.getItem("escola_estoque_itens");
-    const defaultItens = [
-      { id: "1", nome: "Papel A4", categoria: "pedagogico", qtdAtual: 10000, qtdMax: 10000, unidade: "Folhas" },
-      { id: "2", nome: "Toner Preto", categoria: "pedagogico", qtdAtual: 100, qtdMax: 100, unidade: "%" },
-      { id: "3", nome: "Toner Garrafas (Reserva)", categoria: "pedagogico", qtdAtual: 5, qtdMax: 5, unidade: "Unidades" },
-      { id: "4", nome: "Cartolina", categoria: "pedagogico", qtdAtual: 150, qtdMax: 150, unidade: "Unidades" },
-      { id: "5", nome: "Cola Branca", categoria: "pedagogico", qtdAtual: 30, qtdMax: 30, unidade: "Unidades" },
-      { id: "6", nome: "Copo Descartável", categoria: "nao_pedagogico", qtdAtual: 500, qtdMax: 500, unidade: "Unidades" },
-      { id: "7", nome: "Detergente Líquido", categoria: "nao_pedagogico", qtdAtual: 10, qtdMax: 10, unidade: "Litros" },
-      { id: "8", nome: "Papel Toalha", categoria: "nao_pedagogico", qtdAtual: 50, qtdMax: 50, unidade: "Rolos" }
-    ];
-    const itens = savedItens ? JSON.parse(savedItens) : defaultItens;
-    if (!savedItens) {
-      localStorage.setItem("escola_estoque_itens", JSON.stringify(defaultItens));
-    }
-
     const pedagogicosCount = itens.filter((i: any) => i.categoria === "pedagogico").length;
     const naoPedCount = itens.filter((i: any) => i.categoria === "nao_pedagogico").length;
-
-    // Itens críticos (abaixo de 15%)
     const criticosCount = itens.filter((i: any) => i.qtdAtual <= i.qtdMax * 0.15).length;
-
-    // 2. Carregar logs
-    const savedLogs = localStorage.getItem("escola_estoque_logs");
-    const logsCount = savedLogs ? JSON.parse(savedLogs).length : 0;
-
-    // 3. Pedidos pendentes dos professores
-    const savedReqs = localStorage.getItem("solicitacoes_materiais");
-    const reqsCount = savedReqs ? JSON.parse(savedReqs).filter((r: any) => r.status === "pendente").length : 0;
+    
+    const logsCount = logs.length;
+    const reqsCount = solicitacoes.filter((r: any) => r.status === "pendente").length;
 
     setStats({
       pedagogicos: pedagogicosCount,
@@ -50,7 +31,7 @@ export default function AlmoxarifadoDashboard() {
       movimentacoes: logsCount,
       pedidosPendentes: reqsCount
     });
-  }, []);
+  }, [itens, logs, solicitacoes]);
 
   return (
     <div className="space-y-6">

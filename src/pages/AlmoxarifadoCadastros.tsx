@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Trash2, Pencil, Package, HelpCircle } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { addDocument } from "../services/firebaseService";
+import { db } from "../firebase";
 
 interface ItemEstoque {
   id: string;
@@ -18,30 +22,15 @@ interface ItemEstoque {
 }
 
 export default function AlmoxarifadoCadastros() {
-  const [itens, setItens] = useState<ItemEstoque[]>([]);
+  const { data: itens } = useFirestoreCollection<ItemEstoque>("escola_estoque_itens");
+  
   const [nome, setNome] = useState("");
   const [qtdMax, setQtdMax] = useState("");
   const [qtdInicial, setQtdInicial] = useState("");
   const [unidade, setUnidade] = useState("Unidades");
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const loadItens = () => {
-    const saved = localStorage.getItem("escola_estoque_itens");
-    if (saved) {
-      setItens(JSON.parse(saved));
-    }
-  };
-
-  useEffect(() => {
-    loadItens();
-  }, []);
-
-  const saveItens = (newList: ItemEstoque[]) => {
-    setItens(newList);
-    localStorage.setItem("escola_estoque_itens", JSON.stringify(newList));
-  };
-
-  const handleCadastrar = (categoria: "pedagogico" | "nao_pedagogico") => {
+  const handleCadastrar = async (categoria: "pedagogico" | "nao_pedagogico") => {
     if (!nome.trim() || !qtdMax.trim() || !qtdInicial.trim()) {
       toast.error("Por favor, preencha todos os campos obrigatórios.");
       return;
@@ -60,38 +49,34 @@ export default function AlmoxarifadoCadastros() {
       return;
     }
 
-    if (editingId) {
-      // Editar
-      const updated = itens.map(i =>
-        i.id === editingId ? {
-          ...i,
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, "escola_estoque_itens", editingId), {
           nome,
           qtdMax: max,
           qtdAtual: inicial,
           unidade
-        } : i
-      );
-      saveItens(updated);
-      setEditingId(null);
-      toast.success("Item atualizado no almoxarifado!");
-    } else {
-      // Criar novo
-      const newItem: ItemEstoque = {
-        id: Date.now().toString(),
-        nome,
-        categoria,
-        qtdAtual: inicial,
-        qtdMax: max,
-        unidade
-      };
-      saveItens([...itens, newItem]);
-      toast.success(`Item "${nome}" cadastrado com sucesso!`);
-    }
+        });
+        setEditingId(null);
+        toast.success("Item atualizado no almoxarifado!");
+      } else {
+        await addDocument("escola_estoque_itens", {
+          nome,
+          categoria,
+          qtdAtual: inicial,
+          qtdMax: max,
+          unidade
+        });
+        toast.success(`Item "${nome}" cadastrado com sucesso!`);
+      }
 
-    setNome("");
-    setQtdMax("");
-    setQtdInicial("");
-    setUnidade("Unidades");
+      setNome("");
+      setQtdMax("");
+      setQtdInicial("");
+      setUnidade("Unidades");
+    } catch (error) {
+      toast.error("Erro ao salvar item no almoxarifado.");
+    }
   };
 
   const handleEdit = (item: ItemEstoque) => {
@@ -102,11 +87,14 @@ export default function AlmoxarifadoCadastros() {
     setUnidade(item.unidade);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir este item do almoxarifado? Os registros de estoque deste item serão perdidos.")) {
-      const filtered = itens.filter(i => i.id !== id);
-      saveItens(filtered);
-      toast.success("Item excluído com sucesso.");
+      try {
+        await deleteDoc(doc(db, "escola_estoque_itens", id));
+        toast.success("Item excluído com sucesso.");
+      } catch (error) {
+        toast.error("Erro ao excluir item.");
+      }
     }
   };
 

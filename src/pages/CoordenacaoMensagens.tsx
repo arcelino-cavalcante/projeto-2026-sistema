@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Send, Clock, Users, Mail, FileText, Link2, ExternalLink } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { addDocument } from "../services/firebaseService";
 
 interface Notification {
   id: string;
@@ -28,9 +30,10 @@ interface Notification {
 }
 
 export default function CoordenacaoMensagens() {
-  const [etapas, setEtapas] = useState<any[]>([]);
-  const [disciplinas, setDisciplinas] = useState<any[]>([]);
-  const [professores, setProfessores] = useState<any[]>([]);
+  const { data: etapas } = useFirestoreCollection<any>("etapas");
+  const { data: disciplinas } = useFirestoreCollection<any>("disciplinas");
+  const { data: professores } = useFirestoreCollection<any>("professores");
+  const { data: historico } = useFirestoreCollection<Notification>("notificacoes");
 
   // Form States
   const [titulo, setTitulo] = useState("");
@@ -45,25 +48,13 @@ export default function CoordenacaoMensagens() {
   const [linkTexto, setLinkTexto] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
 
-  const [historico, setHistorico] = useState<Notification[]>([]);
-
-  useEffect(() => {
-    // Carregar filtros do localStorage
-    setEtapas(JSON.parse(localStorage.getItem("coordenacao_etapas") || "[]"));
-    setDisciplinas(JSON.parse(localStorage.getItem("coordenacao_disciplinas") || "[]"));
-    setProfessores(JSON.parse(localStorage.getItem("coordenacao_professores") || "[]"));
-
-    // Carregar histórico de mensagens
-    setHistorico(JSON.parse(localStorage.getItem("coordenacao_notificacoes") || "[]"));
-  }, []);
-
   const handleToggleProf = (profId: string) => {
     setSelectedProfIds(prev =>
       prev.includes(profId) ? prev.filter(id => id !== profId) : [...prev, profId]
     );
   };
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titulo.trim() || !mensagem.trim()) {
       toast.error("Preencha o título e a mensagem.");
@@ -92,44 +83,45 @@ export default function CoordenacaoMensagens() {
     const disciplina = disciplinas.find(d => d.id === selectedDisciplinaId);
     const profs = professores.filter(p => selectedProfIds.includes(p.id));
 
-    const novaNotificacao: Notification = {
-      id: Date.now().toString(),
+    const novaNotificacao = {
       titulo,
       mensagem,
       alvo,
-      etapaId: selectedEtapaId || undefined,
-      etapaNome: etapa ? etapa.nome : undefined,
-      disciplinaId: selectedDisciplinaId || undefined,
-      disciplinaNome: disciplina ? disciplina.nome : undefined,
-      profIds: selectedProfIds.length > 0 ? selectedProfIds : undefined,
-      profNomes: profs.length > 0 ? profs.map(p => p.nome) : undefined,
+      etapaId: selectedEtapaId || null,
+      etapaNome: etapa ? etapa.nome : null,
+      disciplinaId: selectedDisciplinaId || null,
+      disciplinaNome: disciplina ? disciplina.nome : null,
+      profIds: selectedProfIds.length > 0 ? selectedProfIds : null,
+      profNomes: profs.length > 0 ? profs.map((p: any) => p.nome) : null,
       dataEnvio: new Date().toLocaleDateString("pt-BR") + " " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       visualizadaPor: [],
-      anexoNome: anexoNome || undefined,
-      linkTexto: linkUrl ? (linkTexto || "Acessar Link") : undefined,
-      linkUrl: linkUrl || undefined
+      anexoNome: anexoNome || null,
+      linkTexto: linkUrl ? (linkTexto || "Acessar Link") : null,
+      linkUrl: linkUrl || null
     };
 
-    const atualizado = [novaNotificacao, ...historico];
-    setHistorico(atualizado);
-    localStorage.setItem("coordenacao_notificacoes", JSON.stringify(atualizado));
+    try {
+      await addDocument("notificacoes", novaNotificacao);
 
-    // Reset Form
-    setTitulo("");
-    setMensagem("");
-    setAlvo("todos");
-    setSelectedEtapaId("");
-    setSelectedDisciplinaId("");
-    setSelectedProfIds([]);
-    setAnexoNome("");
-    setLinkTexto("");
-    setLinkUrl("");
-    
-    // Limpar input de arquivo fisicamente
-    const fileInput = document.getElementById("anexo") as HTMLInputElement;
-    if (fileInput) fileInput.value = "";
+      // Reset Form
+      setTitulo("");
+      setMensagem("");
+      setAlvo("todos");
+      setSelectedEtapaId("");
+      setSelectedDisciplinaId("");
+      setSelectedProfIds([]);
+      setAnexoNome("");
+      setLinkTexto("");
+      setLinkUrl("");
+      
+      // Limpar input de arquivo fisicamente
+      const fileInput = document.getElementById("anexo") as HTMLInputElement;
+      if (fileInput) fileInput.value = "";
 
-    toast.success("Mensagem enviada com sucesso!");
+      toast.success("Mensagem enviada com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao enviar mensagem.");
+    }
   };
 
   return (

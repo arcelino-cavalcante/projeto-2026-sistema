@@ -8,15 +8,15 @@ import { toast } from "sonner";
 import { UserCheck, ShieldAlert, Users, Printer, Key, Mail, Lock } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-import { hydrateLoginData, hydrateDashboardData } from "../services/firebaseService";
-import { setSyncingFlag } from "../services/firebaseSync";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 export default function Login() {
   const navigate = useNavigate();
   
-  // Perfis locais sincronizados
-  const [professores, setProfessores] = useState<any[]>([]);
-  const [coordenadores, setCoordenadores] = useState<any[]>([]);
+  // Lendo diretamente do Firestore em tempo real
+  const { data: professores, loading: profsLoading } = useFirestoreCollection("professores");
+  const { data: coordenadores, loading: coordsLoading } = useFirestoreCollection("coordenadores");
+  
   const [loading, setLoading] = useState(false);
 
   // Perfil de login ativo no formulário
@@ -33,53 +33,14 @@ export default function Login() {
   // Método de autenticação
   const [authMethod, setAuthMethod] = useState<"lista" | "credenciais">("lista");
 
+  // Autoselecionar primeiro item quando a lista carregar
   useEffect(() => {
-    const initData = async () => {
-      setLoading(true);
-      setSyncingFlag(true);
-      // 1. Carrega dados de login de forma instantânea (professores e coordenadores)
-      await hydrateLoginData();
-      setSyncingFlag(false);
-      setLoading(false);
+    if (professores.length > 0 && !selectedProfId) setSelectedProfId(professores[0].id);
+  }, [professores]);
 
-      // Carregar do local storage os perfis já hidratados instantaneamente
-      const savedProfs = localStorage.getItem("coordenacao_professores");
-      if (savedProfs) {
-        const list = JSON.parse(savedProfs);
-        setProfessores(list);
-        if (list.length > 0) setSelectedProfId(list[0].id);
-      }
-
-      const savedCoords = localStorage.getItem("coordenacao_coordenadores");
-      let coordsList = [];
-      if (savedCoords) {
-        coordsList = JSON.parse(savedCoords);
-      }
-      
-      // Criar coordenador padrão inicial se vazio
-      if (coordsList.length === 0) {
-        const defaultCoord = {
-          id: "coord-default-1",
-          nome: "Coordenador Geral",
-          email: "coordenador@eliel",
-          senha: "12345"
-        };
-        coordsList = [defaultCoord];
-        localStorage.setItem("coordenacao_coordenadores", JSON.stringify(coordsList));
-      }
-      setCoordenadores(coordsList);
-      if (coordsList.length > 0) setSelectedCoordId(coordsList[0].id);
-
-      // 2. Disparar a hidratação dos dados pedagógicos em background (sem bloquear o usuário)
-      setSyncingFlag(true);
-      hydrateDashboardData().then(() => {
-        setSyncingFlag(false);
-        console.log("[FirebaseSync] Sincronização em segundo plano concluída!");
-      });
-    };
-
-    initData();
-  }, []);
+  useEffect(() => {
+    if (coordenadores.length > 0 && !selectedCoordId) setSelectedCoordId(coordenadores[0].id);
+  }, [coordenadores]);
 
   const handleLogin = async () => {
     if (role === "admin") {
@@ -216,19 +177,23 @@ export default function Login() {
             {/* Login de Coordenação */}
             {role === "coordenacao" && (
               <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="coord-select" className="text-xs font-bold text-gray-500 uppercase">Selecione seu Perfil de Coordenador</Label>
-                  <Select value={selectedCoordId} onValueChange={setSelectedCoordId}>
-                    <SelectTrigger id="coord-select" className="bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {coordenadores.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.nome} ({c.email})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {coordenadores.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="coord-select" className="text-xs font-bold text-gray-500 uppercase">Selecione seu Perfil de Coordenador</Label>
+                    <Select value={selectedCoordId} onValueChange={setSelectedCoordId}>
+                      <SelectTrigger id="coord-select" className="bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {coordenadores.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.nome} ({c.email})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-500 italic">Carregando coordenadores do Firestore...</p>
+                )}
                 
                 <div className="space-y-1.5">
                   <Label htmlFor="senha-coord" className="text-xs font-bold text-gray-500 uppercase">Senha de Coordenador</Label>

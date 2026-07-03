@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Plus, Trash2, Pencil, UserCheck, Key } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { addDocument } from "../services/firebaseService";
+import { db } from "../firebase";
 
 interface Coordenador {
   id: string;
@@ -14,25 +18,14 @@ interface Coordenador {
 }
 
 export default function AdminCadastroCoordenadores() {
-  const [coordenadores, setCoordenadores] = useState<Coordenador[]>([]);
+  const { data: coordenadores } = useFirestoreCollection<Coordenador>("coordenadores");
+
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("coordenacao_coordenadores");
-    if (saved) {
-      setCoordenadores(JSON.parse(saved));
-    }
-  }, []);
-
-  const saveCoordenadores = (list: Coordenador[]) => {
-    setCoordenadores(list);
-    localStorage.setItem("coordenacao_coordenadores", JSON.stringify(list));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim() || !email.trim()) {
       toast.error("Nome e E-mail são obrigatórios.");
@@ -41,27 +34,30 @@ export default function AdminCadastroCoordenadores() {
 
     const finalPassword = senha.trim() || "12345";
 
-    if (editingId) {
-      const updated = coordenadores.map(c =>
-        c.id === editingId ? { ...c, nome, email, senha: finalPassword } : c
-      );
-      saveCoordenadores(updated);
-      setEditingId(null);
-      toast.success("Coordenador atualizado!");
-    } else {
-      const newCoord: Coordenador = {
-        id: Date.now().toString(),
-        nome,
-        email,
-        senha: finalPassword,
-      };
-      saveCoordenadores([...coordenadores, newCoord]);
-      toast.success(`Coordenador cadastrado com sucesso! Senha padrão: ${finalPassword}`);
-    }
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, "coordenadores", editingId), {
+          nome,
+          email,
+          senha: finalPassword
+        });
+        setEditingId(null);
+        toast.success("Coordenador atualizado!");
+      } else {
+        await addDocument("coordenadores", {
+          nome,
+          email,
+          senha: finalPassword
+        });
+        toast.success(`Coordenador cadastrado com sucesso! Senha padrão: ${finalPassword}`);
+      }
 
-    setNome("");
-    setEmail("");
-    setSenha("");
+      setNome("");
+      setEmail("");
+      setSenha("");
+    } catch (error) {
+      toast.error("Erro ao salvar coordenador.");
+    }
   };
 
   const handleEdit = (c: Coordenador) => {
@@ -71,11 +67,14 @@ export default function AdminCadastroCoordenadores() {
     setSenha(c.senha);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Deseja realmente excluir este coordenador?")) {
-      const filtered = coordenadores.filter(c => c.id !== id);
-      saveCoordenadores(filtered);
-      toast.success("Coordenador excluído.");
+      try {
+        await deleteDoc(doc(db, "coordenadores", id));
+        toast.success("Coordenador excluído.");
+      } catch (error) {
+        toast.error("Erro ao excluir coordenador.");
+      }
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Trash2, Pencil, Calendar, ArrowRight, CheckCircle, AlertCircle, Search, Filter } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { addDocument } from "../services/firebaseService";
+import { doc, updateDoc, deleteDoc, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
 
 interface Task {
   id: string;
@@ -37,13 +41,17 @@ interface Professor {
 }
 
 export default function CoordenacaoGestao() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [professores, setProfessores] = useState<Professor[]>([]);
-  const [etapas, setEtapas] = useState<any[]>([]);
-  const [disciplinas, setDisciplinas] = useState<any[]>([]);
-
-  // Diários de classe status: mapping professorId -> boolean (true: OK, false: Pendente)
-  const [diariosStatus, setDiariosStatus] = useState<Record<string, boolean>>({});
+  const { data: tasks } = useFirestoreCollection<Task>("kanban_tasks");
+  const { data: professores } = useFirestoreCollection<Professor>("professores");
+  const { data: etapas } = useFirestoreCollection<any>("etapas");
+  const { data: disciplinas } = useFirestoreCollection<any>("disciplinas");
+  
+  // Para manter a estrutura, diarios_status será uma collection onde cada doc tem id = professorId, e status = boolean
+  const { data: diariosStatusList } = useFirestoreCollection<{ id: string, entregue: boolean }>("diarios_status");
+  const diariosStatus: Record<string, boolean> = {};
+  diariosStatusList.forEach(d => {
+    diariosStatus[d.id] = d.entregue;
+  });
 
   // Filtros Diários
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,67 +66,42 @@ export default function CoordenacaoGestao() {
   const [taskColuna, setTaskColuna] = useState<"todo" | "in_progress" | "urgent" | "done">("todo");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Carregar tarefas Kanban
-    const savedTasks = localStorage.getItem("coordenacao_kanban_tasks");
-    if (savedTasks) setTasks(JSON.parse(savedTasks));
-
-    // Carregar professores, etapas e disciplinas
-    const savedProfs = localStorage.getItem("coordenacao_professores");
-    if (savedProfs) setProfessores(JSON.parse(savedProfs));
-
-    setEtapas(JSON.parse(localStorage.getItem("coordenacao_etapas") || "[]"));
-    setDisciplinas(JSON.parse(localStorage.getItem("coordenacao_disciplinas") || "[]"));
-
-    // Carregar status dos diários
-    const savedDiarios = localStorage.getItem("coordenacao_diarios_status");
-    if (savedDiarios) setDiariosStatus(JSON.parse(savedDiarios));
-  }, []);
-
-  const saveTasks = (newTasks: Task[]) => {
-    setTasks(newTasks);
-    localStorage.setItem("coordenacao_kanban_tasks", JSON.stringify(newTasks));
-  };
-
-  const saveDiariosStatus = (newStatus: Record<string, boolean>) => {
-    setDiariosStatus(newStatus);
-    localStorage.setItem("coordenacao_diarios_status", JSON.stringify(newStatus));
-  };
-
   // Kanban Actions
-  const handleCreateOrEditTask = (e: React.FormEvent) => {
+  const handleCreateOrEditTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskTitulo.trim()) {
       toast.error("O título da tarefa é obrigatório.");
       return;
     }
 
-    if (editingTaskId) {
-      const updated = tasks.map(t =>
-        t.id === editingTaskId
-          ? { ...t, titulo: taskTitulo, descricao: taskDescricao, prioridade: taskPrioridade, coluna: taskColuna }
-          : t
-      );
-      saveTasks(updated);
-      setEditingTaskId(null);
-      toast.success("Tarefa editada com sucesso!");
-    } else {
-      const newTask: Task = {
-        id: Date.now().toString(),
-        titulo: taskTitulo,
-        descricao: taskDescricao,
-        prioridade: taskPrioridade,
-        coluna: taskColuna,
-      };
-      saveTasks([...tasks, newTask]);
-      toast.success("Tarefa criada no Kanban!");
-    }
+    try {
+      if (editingTaskId) {
+        await updateDoc(doc(db, "kanban_tasks", editingTaskId), {
+          titulo: taskTitulo,
+          descricao: taskDescricao,
+          prioridade: taskPrioridade,
+          coluna: taskColuna
+        });
+        setEditingTaskId(null);
+        toast.success("Tarefa editada com sucesso!");
+      } else {
+        await addDocument("kanban_tasks", {
+          titulo: taskTitulo,
+          descricao: taskDescricao,
+          prioridade: taskPrioridade,
+          coluna: taskColuna,
+        });
+        toast.success("Tarefa criada no Kanban!");
+      }
 
-    setTaskTitulo("");
-    setTaskDescricao("");
-    setTaskPrioridade("media");
-    setTaskColuna("todo");
-    setTaskModalOpen(false);
+      setTaskTitulo("");
+      setTaskDescricao("");
+      setTaskPrioridade("media");
+      setTaskColuna("todo");
+      setTaskModalOpen(false);
+    } catch (error) {
+      toast.error("Erro ao salvar tarefa no Kanban.");
+    }
   };
 
   const handleEditTask = (task: Task) => {
@@ -130,11 +113,14 @@ export default function CoordenacaoGestao() {
     setTaskModalOpen(true);
   };
 
-  const handleDeleteTask = (id: string) => {
+  const handleDeleteTask = async (id: string) => {
     if (confirm("Deseja realmente excluir esta tarefa?")) {
-      const filtered = tasks.filter(t => t.id !== id);
-      saveTasks(filtered);
-      toast.success("Tarefa excluída.");
+      try {
+        await deleteDoc(doc(db, "kanban_tasks", id));
+        toast.success("Tarefa excluída.");
+      } catch (error) {
+        toast.error("Erro ao excluir tarefa.");
+      }
     }
   };
 
@@ -143,23 +129,27 @@ export default function CoordenacaoGestao() {
     e.dataTransfer.setData("taskId", id);
   };
 
-  const handleDrop = (e: React.DragEvent, col: Task["coluna"]) => {
+  const handleDrop = async (e: React.DragEvent, col: Task["coluna"]) => {
     const id = e.dataTransfer.getData("taskId");
     if (!id) return;
     
-    const updated = tasks.map(t =>
-      t.id === id ? { ...t, coluna: col } : t
-    );
-    saveTasks(updated);
-    toast.success("Tarefa movida!");
+    try {
+      await updateDoc(doc(db, "kanban_tasks", id), { coluna: col });
+      toast.success("Tarefa movida!");
+    } catch (error) {
+      toast.error("Erro ao mover tarefa.");
+    }
   };
 
   // Diários Actions
-  const handleToggleDiario = (profId: string) => {
+  const handleToggleDiario = async (profId: string) => {
     const nextVal = !diariosStatus[profId];
-    const updated = { ...diariosStatus, [profId]: nextVal };
-    saveDiariosStatus(updated);
-    toast.success(`Status do diário atualizado com sucesso!`);
+    try {
+      await setDoc(doc(db, "diarios_status", profId), { entregue: nextVal }, { merge: true });
+      toast.success(`Status do diário atualizado com sucesso!`);
+    } catch (error) {
+      toast.error("Erro ao atualizar status do diário.");
+    }
   };
 
   // Filtrar Professores para Diários

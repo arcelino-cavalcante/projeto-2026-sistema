@@ -31,6 +31,11 @@ interface Solicitacao {
   coloridaAdaptada?: boolean;
 }
 
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, updateDoc } from "firebase/firestore";
+import { addDocument } from "../services/firebaseService";
+import { db } from "../firebase";
+
 export default function Impressao() {
   const [professor, setProfessor] = useState<any>(null);
   const [turmas, setTurmas] = useState<any[]>([]);
@@ -48,35 +53,37 @@ export default function Impressao() {
 
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
 
-  // Carregar dados da sessão e localStorage
+  // Carregar dados em tempo real do Firestore
+  const { data: turmasDB } = useFirestoreCollection<any>("turmas");
+  const { data: pcdDB } = useFirestoreCollection<any>("pcd_estudantes");
+  const { data: todasSolicitacoes } = useFirestoreCollection<any>("xerox_solicitacoes");
+
   useEffect(() => {
     const sessao = localStorage.getItem("sessao_usuario");
     if (sessao) {
-      const prof = JSON.parse(sessao);
-      setProfessor(prof);
-
-      // Carregar turmas e filtrar pelas etapas que o professor leciona
-      const todasTurmas = JSON.parse(localStorage.getItem("coordenacao_turmas") || "[]");
-      const turmasFiltradas = todasTurmas.filter((t: any) => prof.etapaIds?.includes(t.etapaId));
-      setTurmas(turmasFiltradas);
-    }
-
-    // Carregar estudantes PCD
-    setPcdEstudantes(JSON.parse(localStorage.getItem("coordenacao_pcd_estudantes") || "[]"));
-
-    // Carregar todas as solicitações de impressão
-    const salvas = localStorage.getItem("xerox_solicitacoes");
-    if (salvas) {
-      setSolicitacoes(JSON.parse(salvas));
+      setProfessor(JSON.parse(sessao));
     }
   }, []);
 
-  // Salvar solicitações no localStorage
   useEffect(() => {
-    if (solicitacoes.length > 0) {
-      localStorage.setItem("xerox_solicitacoes", JSON.stringify(solicitacoes));
+    if (professor && turmasDB) {
+      const turmasFiltradas = turmasDB.filter((t: any) => professor.etapaIds?.includes(t.etapaId));
+      setTurmas(turmasFiltradas);
     }
-  }, [solicitacoes]);
+  }, [professor, turmasDB]);
+
+  useEffect(() => {
+    if (pcdDB) {
+      setPcdEstudantes(pcdDB);
+    }
+  }, [pcdDB]);
+
+  useEffect(() => {
+    if (todasSolicitacoes && professor) {
+      const filtradas = todasSolicitacoes.filter((s: any) => s.profId === professor.id);
+      setSolicitacoes(filtradas);
+    }
+  }, [todasSolicitacoes, professor]);
 
   // Encontrar turma selecionada para saber total de alunos
   const turmaSelecionada = turmas.find(t => t.id === selectedTurmaId);
@@ -137,8 +144,7 @@ export default function Impressao() {
         pdfUrlAdaptada = await uploadFileToStorage(pdfFileAdaptada, "adaptadas");
       }
 
-      const novaSolicitacao: Solicitacao = {
-        id: Date.now().toString(),
+      const novaSolicitacao = {
         profId: professor?.id || "unknown",
         profNome: professor?.nome || "Professor",
         turmaId: selectedTurmaId,
@@ -150,13 +156,11 @@ export default function Impressao() {
         fileName: pdfUrl, // URL de download seguro
         status: "pendente",
         dataEnvio: new Date().toLocaleDateString("pt-BR") + " às " + new Date().toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' }),
-        fileNameAdaptada: pdfUrlAdaptada,
-        coloridaAdaptada: enviarAdaptada ? coloridaAdaptada : undefined
+        fileNameAdaptada: pdfUrlAdaptada || null,
+        coloridaAdaptada: enviarAdaptada ? coloridaAdaptada : null
       };
 
-      const atualizadas = [...solicitacoes, novaSolicitacao];
-      setSolicitacoes(atualizadas);
-      localStorage.setItem("xerox_solicitacoes", JSON.stringify(atualizadas));
+      await addDocument("xerox_solicitacoes", novaSolicitacao);
 
       // Reset formulário
       setSelectedTurmaId("");
@@ -182,16 +186,20 @@ export default function Impressao() {
   };
 
   // Simular alteração de status para testes de interface
-  const handleSimulatePrint = (id: string) => {
-    const atualizadas = solicitacoes.map(s => s.id === id ? { ...s, status: "impresso" as const } : s);
-    setSolicitacoes(atualizadas);
-    localStorage.setItem("xerox_solicitacoes", JSON.stringify(atualizadas));
-    toast.success("Impressão simulada! A atividade foi marcada como impressa.");
+  const handleSimulatePrint = async (id: string) => {
+    try {
+      const docRef = doc(db, "xerox_solicitacoes", id);
+      await updateDoc(docRef, { status: "impresso" });
+      toast.success("Impressão simulada! A atividade foi marcada como impressa.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao simular impressão.");
+    }
   };
 
   // Filtrar solicitações do professor logado
-  const enviadas = solicitacoes.filter(s => s.profId === professor?.id && s.status === "pendente");
-  const impressas = solicitacoes.filter(s => s.profId === professor?.id && s.status === "impresso");
+  const enviadas = solicitacoes.filter(s => s.status === "pendente");
+  const impressas = solicitacoes.filter(s => s.status === "impresso");
 
   return (
     <div className="space-y-6">

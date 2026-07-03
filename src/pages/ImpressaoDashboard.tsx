@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Printer, Clock, Check } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 interface Solicitacao {
   id: string;
@@ -9,14 +10,7 @@ interface Solicitacao {
 }
 
 export default function ImpressaoDashboard() {
-  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
-
-  useEffect(() => {
-    const salvas = localStorage.getItem("xerox_solicitacoes");
-    if (salvas) {
-      setSolicitacoes(JSON.parse(salvas));
-    }
-  }, []);
+  const { data: solicitacoes } = useFirestoreCollection<Solicitacao>("xerox_solicitacoes");
 
   const pendentes = solicitacoes.filter(s => s.status === "pendente");
   const concluidos = solicitacoes.filter(s => s.status === "impresso");

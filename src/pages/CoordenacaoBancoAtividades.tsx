@@ -31,35 +31,38 @@ interface AtividadeExitosa {
   files: Array<{ name: string; type: string }>;
 }
 
-export default function CoordenacaoBancoAtividades() {
-  const [professores, setProfessores] = useState<any[]>([]);
-  const [selectedProfId, setSelectedProfId] = useState<string>("");
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
+export default function CoordenacaoBancoAtividades() {
+  const [selectedProfId, setSelectedProfId] = useState<string>("");
+  const [professores, setProfessores] = useState<any[]>([]);
   const [atividadesEmergencia, setAtividadesEmergencia] = useState<AtividadeEmergencia[]>([]);
   const [atividadesExitosas, setAtividadesExitosas] = useState<AtividadeExitosa[]>([]);
 
+  const { data: professoresDB } = useFirestoreCollection<any>("professores");
+  const { data: emgDB } = useFirestoreCollection<AtividadeEmergencia>("atividades_emergencia");
+  const { data: extDB } = useFirestoreCollection<AtividadeExitosa>("atividades_exitosas");
+
   useEffect(() => {
-    // Carregar professores
-    const savedProfs = localStorage.getItem("coordenacao_professores");
-    if (savedProfs) {
-      const list = JSON.parse(savedProfs);
-      setProfessores(list);
-      if (list.length > 0) {
-        setSelectedProfId(list[0].id);
+    if (professoresDB) {
+      setProfessores(professoresDB);
+      if (professoresDB.length > 0 && !selectedProfId) {
+        setSelectedProfId(professoresDB[0].id);
       }
     }
+  }, [professoresDB, selectedProfId]);
 
-    // Carregar atividades
-    const savedEmergencia = localStorage.getItem("atividades_emergencia");
-    if (savedEmergencia) {
-      setAtividadesEmergencia(JSON.parse(savedEmergencia));
+  useEffect(() => {
+    if (emgDB) {
+      setAtividadesEmergencia(emgDB);
     }
+  }, [emgDB]);
 
-    const savedExitosas = localStorage.getItem("atividades_exitosas");
-    if (savedExitosas) {
-      setAtividadesExitosas(JSON.parse(savedExitosas));
+  useEffect(() => {
+    if (extDB) {
+      setAtividadesExitosas(extDB);
     }
-  }, []);
+  }, [extDB]);
 
   const currentProf = professores.find(p => p.id === selectedProfId);
 

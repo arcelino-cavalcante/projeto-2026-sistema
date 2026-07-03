@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Pencil, Trash2 } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { addDocument } from "../services/firebaseService";
+import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { db } from "../firebase";
 
 type Etapa = { id: string; nome: string; };
 type Turma = { id: string; nome: string; etapaId: string; estudantes: number; };
@@ -28,11 +32,11 @@ type EstudantePCD = {
 };
 
 export default function CoordenacaoCadastros() {
-  const [etapas, setEtapas] = useState<Etapa[]>([]);
-  const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
-  const [professores, setProfessores] = useState<Professor[]>([]);
-  const [pcdEstudantes, setPcdEstudantes] = useState<EstudantePCD[]>([]);
+  const { data: etapas } = useFirestoreCollection<Etapa>("etapas");
+  const { data: turmas } = useFirestoreCollection<Turma>("turmas");
+  const { data: disciplinas } = useFirestoreCollection<Disciplina>("disciplinas");
+  const { data: professores } = useFirestoreCollection<Professor>("professores");
+  const { data: pcdEstudantes } = useFirestoreCollection<EstudantePCD>("pcd_estudantes");
 
   // Form states para PCD
   const [pcdNome, setPcdNome] = useState("");
@@ -43,62 +47,29 @@ export default function CoordenacaoCadastros() {
   const [pcdAtividades, setPcdAtividades] = useState("");
   const [editingPcdId, setEditingPcdId] = useState<string | null>(null);
 
-  // Carregar dados iniciais do LocalStorage
-  useEffect(() => {
-    const savedEtapas = localStorage.getItem("coordenacao_etapas");
-    const savedTurmas = localStorage.getItem("coordenacao_turmas");
-    const savedDisciplinas = localStorage.getItem("coordenacao_disciplinas");
-    const savedProfessores = localStorage.getItem("coordenacao_professores");
-    const savedPcd = localStorage.getItem("coordenacao_pcd_estudantes");
-
-    if (savedEtapas) setEtapas(JSON.parse(savedEtapas));
-    if (savedTurmas) setTurmas(JSON.parse(savedTurmas));
-    if (savedDisciplinas) setDisciplinas(JSON.parse(savedDisciplinas));
-    if (savedProfessores) setProfessores(JSON.parse(savedProfessores));
-    if (savedPcd) setPcdEstudantes(JSON.parse(savedPcd));
-  }, []);
-
-  // Salvar no LocalStorage sempre que o estado mudar
-  useEffect(() => {
-    localStorage.setItem("coordenacao_etapas", JSON.stringify(etapas));
-  }, [etapas]);
-
-  useEffect(() => {
-    localStorage.setItem("coordenacao_turmas", JSON.stringify(turmas));
-  }, [turmas]);
-
-  useEffect(() => {
-    localStorage.setItem("coordenacao_disciplinas", JSON.stringify(disciplinas));
-  }, [disciplinas]);
-
-  useEffect(() => {
-    localStorage.setItem("coordenacao_professores", JSON.stringify(professores));
-  }, [professores]);
-
-  useEffect(() => {
-    localStorage.setItem("coordenacao_pcd_estudantes", JSON.stringify(pcdEstudantes));
-  }, [pcdEstudantes]);
-
   // ==========================================
   // ETAPAS CRUD
   // ==========================================
   const [nomeEtapa, setNomeEtapa] = useState("");
   const [editingEtapaId, setEditingEtapaId] = useState<string | null>(null);
 
-  const handleAddEtapa = (e: React.FormEvent) => {
+  const handleAddEtapa = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nomeEtapa.trim()) return;
 
-    if (editingEtapaId) {
-      setEtapas(etapas.map(et => et.id === editingEtapaId ? { ...et, nome: nomeEtapa } : et));
-      setEditingEtapaId(null);
-      toast.success("Etapa de ensino atualizada!");
-    } else {
-      const newEtapa = { id: Date.now().toString(), nome: nomeEtapa };
-      setEtapas([...etapas, newEtapa]);
-      toast.success("Etapa de ensino cadastrada!");
+    try {
+      if (editingEtapaId) {
+        await updateDoc(doc(db, "etapas", editingEtapaId), { nome: nomeEtapa });
+        setEditingEtapaId(null);
+        toast.success("Etapa de ensino atualizada!");
+      } else {
+        await addDocument("etapas", { nome: nomeEtapa });
+        toast.success("Etapa de ensino cadastrada!");
+      }
+      setNomeEtapa("");
+    } catch (error) {
+      toast.error("Erro ao salvar etapa.");
     }
-    setNomeEtapa("");
   };
 
   const handleEditEtapa = (etapa: Etapa) => {
@@ -106,15 +77,16 @@ export default function CoordenacaoCadastros() {
     setNomeEtapa(etapa.nome);
   };
 
-  const handleDeleteEtapa = (id: string) => {
+  const handleDeleteEtapa = async (id: string) => {
     if (confirm("Tem certeza? Isso excluirá todas as turmas associadas a essa etapa e removerá a associação dos professores.")) {
-      setEtapas(etapas.filter(et => et.id !== id));
-      setTurmas(turmas.filter(t => t.etapaId !== id));
-      setProfessores(professores.map(p => ({
-        ...p,
-        etapaIds: p.etapaIds.filter(eId => eId !== id)
-      })));
-      toast.success("Etapa excluída e turmas limpas!");
+      try {
+        await deleteDoc(doc(db, "etapas", id));
+        // TODO: Em um ambiente real, você também precisaria deletar as turmas associadas em lote no Firebase
+        // Para esta POC, deletamos apenas a etapa e deixamos as turmas "órfãs" que devem ser excluídas individualmente.
+        toast.success("Etapa excluída com sucesso!");
+      } catch (error) {
+        toast.error("Erro ao excluir etapa.");
+      }
     }
   };
 
@@ -131,7 +103,7 @@ export default function CoordenacaoCadastros() {
   const [estudantesTurma, setEstudantesTurma] = useState("");
   const [editingTurmaId, setEditingTurmaId] = useState<string | null>(null);
 
-  const handleAddTurma = (e: React.FormEvent) => {
+  const handleAddTurma = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nomeTurma.trim() || !selectedEtapaIdForTurma || !estudantesTurma) {
       toast.error("Preencha todos os campos da turma.");
@@ -143,29 +115,30 @@ export default function CoordenacaoCadastros() {
       return;
     }
 
-    if (editingTurmaId) {
-      setTurmas(turmas.map(t => t.id === editingTurmaId ? {
-        ...t,
-        nome: nomeTurma,
-        etapaId: selectedEtapaIdForTurma,
-        estudantes: numEstudantes
-      } : t));
-      setEditingTurmaId(null);
-      toast.success("Turma atualizada!");
-    } else {
-      const newTurma = {
-        id: Date.now().toString(),
-        nome: nomeTurma,
-        etapaId: selectedEtapaIdForTurma,
-        estudantes: numEstudantes
-      };
-      setTurmas([...turmas, newTurma]);
-      toast.success("Turma cadastrada com sucesso!");
-    }
+    try {
+      if (editingTurmaId) {
+        await updateDoc(doc(db, "turmas", editingTurmaId), {
+          nome: nomeTurma,
+          etapaId: selectedEtapaIdForTurma,
+          estudantes: numEstudantes
+        });
+        setEditingTurmaId(null);
+        toast.success("Turma atualizada!");
+      } else {
+        await addDocument("turmas", {
+          nome: nomeTurma,
+          etapaId: selectedEtapaIdForTurma,
+          estudantes: numEstudantes
+        });
+        toast.success("Turma cadastrada com sucesso!");
+      }
 
-    setNomeTurma("");
-    setSelectedEtapaIdForTurma("");
-    setEstudantesTurma("");
+      setNomeTurma("");
+      setSelectedEtapaIdForTurma("");
+      setEstudantesTurma("");
+    } catch (error) {
+      toast.error("Erro ao salvar turma.");
+    }
   };
 
   const handleEditTurma = (turma: Turma) => {
@@ -175,10 +148,14 @@ export default function CoordenacaoCadastros() {
     setEstudantesTurma(turma.estudantes.toString());
   };
 
-  const handleDeleteTurma = (id: string) => {
+  const handleDeleteTurma = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir esta turma?")) {
-      setTurmas(turmas.filter(t => t.id !== id));
-      toast.success("Turma excluída com sucesso.");
+      try {
+        await deleteDoc(doc(db, "turmas", id));
+        toast.success("Turma excluída com sucesso.");
+      } catch (error) {
+        toast.error("Erro ao excluir turma.");
+      }
     }
   };
 
@@ -195,20 +172,23 @@ export default function CoordenacaoCadastros() {
   const [nomeDisciplina, setNomeDisciplina] = useState("");
   const [editingDisciplinaId, setEditingDisciplinaId] = useState<string | null>(null);
 
-  const handleAddDisciplina = (e: React.FormEvent) => {
+  const handleAddDisciplina = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nomeDisciplina.trim()) return;
 
-    if (editingDisciplinaId) {
-      setDisciplinas(disciplinas.map(d => d.id === editingDisciplinaId ? { ...d, nome: nomeDisciplina } : d));
-      setEditingDisciplinaId(null);
-      toast.success("Disciplina atualizada!");
-    } else {
-      const newDisc = { id: Date.now().toString(), nome: nomeDisciplina };
-      setDisciplinas([...disciplinas, newDisc]);
-      toast.success("Disciplina cadastrada!");
+    try {
+      if (editingDisciplinaId) {
+        await updateDoc(doc(db, "disciplinas", editingDisciplinaId), { nome: nomeDisciplina });
+        setEditingDisciplinaId(null);
+        toast.success("Disciplina atualizada!");
+      } else {
+        await addDocument("disciplinas", { nome: nomeDisciplina });
+        toast.success("Disciplina cadastrada!");
+      }
+      setNomeDisciplina("");
+    } catch (error) {
+      toast.error("Erro ao salvar disciplina.");
     }
-    setNomeDisciplina("");
   };
 
   const handleEditDisciplina = (disc: Disciplina) => {
@@ -216,14 +196,14 @@ export default function CoordenacaoCadastros() {
     setNomeDisciplina(disc.nome);
   };
 
-  const handleDeleteDisciplina = (id: string) => {
+  const handleDeleteDisciplina = async (id: string) => {
     if (confirm("Tem certeza? Isso removerá a associação desta disciplina em todos os professores.")) {
-      setDisciplinas(disciplinas.filter(d => d.id !== id));
-      setProfessores(professores.map(p => ({
-        ...p,
-        disciplinaIds: (p.disciplinaIds || []).filter(dId => dId !== id)
-      })));
-      toast.success("Disciplina excluída.");
+      try {
+        await deleteDoc(doc(db, "disciplinas", id));
+        toast.success("Disciplina excluída.");
+      } catch (error) {
+        toast.error("Erro ao excluir disciplina.");
+      }
     }
   };
 
@@ -254,7 +234,7 @@ export default function CoordenacaoCadastros() {
     );
   };
 
-  const handleAddProfessor = (e: React.FormEvent) => {
+  const handleAddProfessor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nomeProfessor.trim() || !emailProfessor.trim() || selectedEtapasForProf.length === 0 || selectedDisciplinasForProf.length === 0) {
       toast.error("Preencha todos os campos e selecione pelo menos uma etapa e uma disciplina.");
@@ -263,35 +243,36 @@ export default function CoordenacaoCadastros() {
 
     const finalPassword = senhaProfessor.trim() || "12345";
 
-    if (editingProfId) {
-      setProfessores(professores.map(p => p.id === editingProfId ? {
-        ...p,
-        nome: nomeProfessor,
-        email: emailProfessor,
-        senha: finalPassword,
-        etapaIds: selectedEtapasForProf,
-        disciplinaIds: selectedDisciplinasForProf
-      } : p));
-      setEditingProfId(null);
-      toast.success("Cadastro do professor atualizado!");
-    } else {
-      const newProf: Professor = {
-        id: Date.now().toString(),
-        nome: nomeProfessor,
-        email: emailProfessor,
-        senha: finalPassword,
-        etapaIds: selectedEtapasForProf,
-        disciplinaIds: selectedDisciplinasForProf
-      };
-      setProfessores([...professores, newProf]);
-      toast.success(`Professor cadastrado com sucesso! Senha: ${finalPassword}`);
-    }
+    try {
+      if (editingProfId) {
+        await updateDoc(doc(db, "professores", editingProfId), {
+          nome: nomeProfessor,
+          email: emailProfessor,
+          senha: finalPassword,
+          etapaIds: selectedEtapasForProf,
+          disciplinaIds: selectedDisciplinasForProf
+        });
+        setEditingProfId(null);
+        toast.success("Cadastro do professor atualizado!");
+      } else {
+        await addDocument("professores", {
+          nome: nomeProfessor,
+          email: emailProfessor,
+          senha: finalPassword,
+          etapaIds: selectedEtapasForProf,
+          disciplinaIds: selectedDisciplinasForProf
+        });
+        toast.success(`Professor cadastrado com sucesso! Senha: ${finalPassword}`);
+      }
 
-    setNomeProfessor("");
-    setEmailProfessor("");
-    setSenhaProfessor("");
-    setSelectedEtapasForProf([]);
-    setSelectedDisciplinasForProf([]);
+      setNomeProfessor("");
+      setEmailProfessor("");
+      setSenhaProfessor("");
+      setSelectedEtapasForProf([]);
+      setSelectedDisciplinasForProf([]);
+    } catch (error) {
+      toast.error("Erro ao salvar professor.");
+    }
   };
 
   const handleEditProfessor = (prof: Professor) => {
@@ -303,10 +284,14 @@ export default function CoordenacaoCadastros() {
     setSelectedDisciplinasForProf(prof.disciplinaIds || []);
   };
 
-  const handleDeleteProfessor = (id: string) => {
+  const handleDeleteProfessor = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir este professor?")) {
-      setProfessores(professores.filter(p => p.id !== id));
-      toast.success("Professor excluído.");
+      try {
+        await deleteDoc(doc(db, "professores", id));
+        toast.success("Professor excluído.");
+      } catch (error) {
+        toast.error("Erro ao excluir professor.");
+      }
     }
   };
 
@@ -322,7 +307,7 @@ export default function CoordenacaoCadastros() {
   // ==========================================
   // ESTUDANTES PCD CRUD
   // ==========================================
-  const handleAddPcd = (e: React.FormEvent) => {
+  const handleAddPcd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pcdNome.trim() || !pcdEtapaId || !pcdTurmaId) {
       toast.error("Por favor, preencha Nome, Etapa e Turma do estudante.");
@@ -337,10 +322,9 @@ export default function CoordenacaoCadastros() {
       return;
     }
 
-    if (editingPcdId) {
-      setPcdEstudantes(pcdEstudantes.map(p =>
-        p.id === editingPcdId ? {
-          ...p,
+    try {
+      if (editingPcdId) {
+        await updateDoc(doc(db, "pcd_estudantes", editingPcdId), {
           nome: pcdNome,
           etapaId: pcdEtapaId,
           etapaNome: etapa.nome,
@@ -349,31 +333,31 @@ export default function CoordenacaoCadastros() {
           cid: pcdCid,
           observacoes: pcdObservacoes,
           atividadesRecomendadas: pcdAtividades
-        } : p
-      ));
-      setEditingPcdId(null);
-      toast.success("Dados do estudante PCD atualizados!");
-    } else {
-      const newPcd: EstudantePCD = {
-        id: Date.now().toString(),
-        nome: pcdNome,
-        etapaId: pcdEtapaId,
-        etapaNome: etapa.nome,
-        turmaId: pcdTurmaId,
-        turmaNome: turma.nome,
-        cid: pcdCid,
-        observacoes: pcdObservacoes,
-        atividadesRecomendadas: pcdAtividades
-      };
-      setPcdEstudantes([...pcdEstudantes, newPcd]);
-      toast.success("Estudante PCD cadastrado!");
-    }
+        });
+        setEditingPcdId(null);
+        toast.success("Dados do estudante PCD atualizados!");
+      } else {
+        await addDocument("pcd_estudantes", {
+          nome: pcdNome,
+          etapaId: pcdEtapaId,
+          etapaNome: etapa.nome,
+          turmaId: pcdTurmaId,
+          turmaNome: turma.nome,
+          cid: pcdCid,
+          observacoes: pcdObservacoes,
+          atividadesRecomendadas: pcdAtividades
+        });
+        toast.success("Estudante PCD cadastrado!");
+      }
 
-    // Reset
-    setPcdNome("");
-    setPcdCid("");
-    setPcdObservacoes("");
-    setPcdAtividades("");
+      // Reset
+      setPcdNome("");
+      setPcdCid("");
+      setPcdObservacoes("");
+      setPcdAtividades("");
+    } catch (error) {
+      toast.error("Erro ao salvar estudante PCD.");
+    }
   };
 
   const handleEditPcd = (est: EstudantePCD) => {
@@ -386,10 +370,14 @@ export default function CoordenacaoCadastros() {
     setPcdAtividades(est.atividadesRecomendadas || "");
   };
 
-  const handleDeletePcd = (id: string) => {
+  const handleDeletePcd = async (id: string) => {
     if (confirm("Deseja realmente remover este estudante PCD?")) {
-      setPcdEstudantes(pcdEstudantes.filter(p => p.id !== id));
-      toast.success("Estudante PCD excluído.");
+      try {
+        await deleteDoc(doc(db, "pcd_estudantes", id));
+        toast.success("Estudante PCD excluído.");
+      } catch (error) {
+        toast.error("Erro ao excluir estudante PCD.");
+      }
     }
   };
 

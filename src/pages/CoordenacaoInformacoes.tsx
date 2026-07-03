@@ -8,6 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Pencil, Trash2, Link2, FileText } from "lucide-react";
 
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { addDocument } from "../services/firebaseService";
+import { db } from "../firebase";
+
 interface InfoLink {
   id: string;
   tipo: "link" | "dado";
@@ -16,25 +21,13 @@ interface InfoLink {
 }
 
 export default function CoordenacaoInformacoes() {
-  const [items, setItems] = useState<InfoLink[]>([]);
+  const { data: items } = useFirestoreCollection<InfoLink>("coordenacao_info_links");
   const [tipo, setTipo] = useState<"link" | "dado">("link");
   const [titulo, setTitulo] = useState("");
   const [conteudo, setConteudo] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("coordenacao_info_links");
-    if (saved) {
-      setItems(JSON.parse(saved));
-    }
-  }, []);
-
-  const saveItems = (newItems: InfoLink[]) => {
-    setItems(newItems);
-    localStorage.setItem("coordenacao_info_links", JSON.stringify(newItems));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titulo.trim() || !conteudo.trim()) {
       toast.error("Preencha todos os campos.");
@@ -46,26 +39,30 @@ export default function CoordenacaoInformacoes() {
       return;
     }
 
-    if (editingId) {
-      const updated = items.map(item =>
-        item.id === editingId ? { ...item, tipo, titulo, conteudo } : item
-      );
-      saveItems(updated);
-      setEditingId(null);
-      toast.success("Informação atualizada com sucesso!");
-    } else {
-      const newItem: InfoLink = {
-        id: Date.now().toString(),
-        tipo,
-        titulo,
-        conteudo,
-      };
-      saveItems([...items, newItem]);
-      toast.success("Informação cadastrada com sucesso!");
-    }
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, "coordenacao_info_links", editingId), {
+          tipo,
+          titulo,
+          conteudo
+        });
+        setEditingId(null);
+        toast.success("Informação atualizada com sucesso!");
+      } else {
+        await addDocument("coordenacao_info_links", {
+          tipo,
+          titulo,
+          conteudo
+        });
+        toast.success("Informação cadastrada com sucesso!");
+      }
 
-    setTitulo("");
-    setConteudo("");
+      setTitulo("");
+      setConteudo("");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar informação.");
+    }
   };
 
   const handleEdit = (item: InfoLink) => {
@@ -75,11 +72,15 @@ export default function CoordenacaoInformacoes() {
     setConteudo(item.conteudo);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir esta informação?")) {
-      const filtered = items.filter(item => item.id !== id);
-      saveItems(filtered);
-      toast.success("Informação excluída.");
+      try {
+        await deleteDoc(doc(db, "coordenacao_info_links", id));
+        toast.success("Informação excluída.");
+      } catch (err) {
+        console.error(err);
+        toast.error("Erro ao excluir informação.");
+      }
     }
   };
 

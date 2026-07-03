@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Lock } from "lucide-react";
 
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase";
+
 export default function ProfessorConfiguracoes() {
   const [professor, setProfessor] = useState<any>(null);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -19,7 +22,7 @@ export default function ProfessorConfiguracoes() {
     }
   }, []);
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!professor) return;
 
@@ -45,27 +48,26 @@ export default function ProfessorConfiguracoes() {
       return;
     }
 
-    // 1. Atualizar sessão local do usuário
-    const professorAtualizado = { ...professor, senha: novaSenha };
-    setProfessor(professorAtualizado);
-    localStorage.setItem("sessao_usuario", JSON.stringify(professorAtualizado));
+    try {
+      // 1. Atualizar no Firestore na coleção de professores
+      const docRef = doc(db, "professores", professor.id);
+      await updateDoc(docRef, { senha: novaSenha });
 
-    // 2. Atualizar lista global de professores cadastrados pela coordenação
-    const savedProfs = localStorage.getItem("coordenacao_professores");
-    if (savedProfs) {
-      const profs = JSON.parse(savedProfs);
-      const profsAtualizados = profs.map((p: any) =>
-        p.id === professor.id ? { ...p, senha: novaSenha } : p
-      );
-      localStorage.setItem("coordenacao_professores", JSON.stringify(profsAtualizados));
+      // 2. Atualizar sessão local do usuário
+      const professorAtualizado = { ...professor, senha: novaSenha };
+      setProfessor(professorAtualizado);
+      localStorage.setItem("sessao_usuario", JSON.stringify(professorAtualizado));
+
+      // Resetar campos
+      setSenhaAtual("");
+      setNovaSenha("");
+      setConfirmarSenha("");
+
+      toast.success("Senha alterada com sucesso!");
+    } catch (err) {
+      console.error("Erro ao alterar senha:", err);
+      toast.error("Erro ao alterar senha no servidor.");
     }
-
-    // Resetar campos
-    setSenhaAtual("");
-    setNovaSenha("");
-    setConfirmarSenha("");
-
-    toast.success("Senha alterada com sucesso!");
   };
 
   return (

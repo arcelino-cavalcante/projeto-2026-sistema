@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Printer, AlertTriangle, CheckCircle, FileText, TrendingUp } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 interface Solicitacao {
   id: string;
@@ -28,21 +29,20 @@ export default function Dashboard() {
   const [solicitacoesMes, setSolicitacoesMes] = useState<Solicitacao[]>([]);
   const [limiteCota] = useState(500);
 
+  const { data: todasSolicitacoes } = useFirestoreCollection<Solicitacao>("xerox_solicitacoes");
+
   useEffect(() => {
     const sessao = localStorage.getItem("sessao_usuario");
     if (sessao) {
       const prof = JSON.parse(sessao);
       setProfessor(prof);
 
-      // Buscar solicitações e filtrar por mês corrente e professor logado
-      const salvas = localStorage.getItem("xerox_solicitacoes");
-      if (salvas) {
-        const todas = JSON.parse(salvas);
+      if (todasSolicitacoes.length > 0) {
         const now = new Date();
         const currentMonthStr = String(now.getMonth() + 1).padStart(2, "0");
         const currentYearStr = String(now.getFullYear());
 
-        const filtradas = todas.filter((s: any) => {
+        const filtradas = todasSolicitacoes.filter((s: any) => {
           if (s.profId !== prof.id) return false;
           try {
             const datePart = s.dataEnvio.split(" ")[0]; // "DD/MM/AAAA"
@@ -55,7 +55,7 @@ export default function Dashboard() {
         setSolicitacoesMes(filtradas);
       }
     }
-  }, []);
+  }, [todasSolicitacoes]);
 
   const totalImpressos = solicitacoesMes.reduce((acc, curr) => acc + curr.copias, 0);
   const restanteCota = Math.max(0, limiteCota - totalImpressos);

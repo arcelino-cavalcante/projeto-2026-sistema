@@ -50,46 +50,9 @@ import AlmoxarifadoCadastros from "./pages/AlmoxarifadoCadastros";
 import AlmoxarifadoAgendamentos from "./pages/AlmoxarifadoAgendamentos";
 
 import NotFound from "./pages/NotFound";
-import { useState, useEffect } from "react";
-import { hydrateLocalStorageFromFirebase } from "./services/firebaseService";
-import { setSyncingFlag } from "./services/firebaseSync";
-
 const queryClient = new QueryClient();
 
 const App = () => {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Hidratar os dados em background de forma síncrona no início da aplicação
-    const runHydration = async () => {
-      try {
-        setSyncingFlag(true);
-        await hydrateLocalStorageFromFirebase();
-        console.log("[FirebaseSync] Banco de dados em nuvem sincronizado com sucesso!");
-      } catch (err) {
-        console.error("Erro na inicialização do Firebase:", err);
-      } finally {
-        setSyncingFlag(false);
-        setLoading(false);
-      }
-    };
-    runHydration();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center space-y-4">
-          {/* Spinner moderno */}
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-          <div className="text-center">
-            <h2 className="text-xl font-bold text-slate-800">Sistema Pedagógico</h2>
-            <p className="text-sm text-slate-500">Sincronizando dados em nuvem...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <QueryClientProvider client={queryClient}>

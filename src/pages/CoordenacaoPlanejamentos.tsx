@@ -42,7 +42,14 @@ interface PlanoAula {
   fileName?: string;
 }
 
+import { useFirestoreCollection } from "../hooks/useFirestore";
+
 export default function CoordenacaoPlanejamentos() {
+  const { data: savedPlanos } = useFirestoreCollection<PlanoAula>("planejamentos");
+  const { data: savedProfs } = useFirestoreCollection<any>("professores");
+  const { data: savedTurmas } = useFirestoreCollection<any>("turmas");
+  const { data: savedDisciplinas } = useFirestoreCollection<any>("disciplinas");
+
   const [planos, setPlanos] = useState<PlanoAula[]>([]);
   const [professores, setProfessores] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
@@ -56,17 +63,20 @@ export default function CoordenacaoPlanejamentos() {
   const [filterTipo, setFilterTipo] = useState("todos");
 
   useEffect(() => {
-    // Carregar planos, professores, turmas e disciplinas
-    const savedPlanos = JSON.parse(localStorage.getItem("professor_planejamentos") || "[]");
-    const savedProfs = JSON.parse(localStorage.getItem("coordenacao_professores") || "[]");
-    const savedTurmas = JSON.parse(localStorage.getItem("coordenacao_turmas") || "[]");
-    const savedDisciplinas = JSON.parse(localStorage.getItem("coordenacao_disciplinas") || "[]");
+    if (savedPlanos) setPlanos(savedPlanos);
+  }, [savedPlanos]);
 
-    setPlanos(savedPlanos);
-    setProfessores(savedProfs);
-    setTurmas(savedTurmas);
-    setDisciplinas(savedDisciplinas);
-  }, []);
+  useEffect(() => {
+    if (savedProfs) setProfessores(savedProfs);
+  }, [savedProfs]);
+
+  useEffect(() => {
+    if (savedTurmas) setTurmas(savedTurmas);
+  }, [savedTurmas]);
+
+  useEffect(() => {
+    if (savedDisciplinas) setDisciplinas(savedDisciplinas);
+  }, [savedDisciplinas]);
 
   // Filtrar planos de acordo com os inputs
   const planosFiltrados = planos.filter(p => {

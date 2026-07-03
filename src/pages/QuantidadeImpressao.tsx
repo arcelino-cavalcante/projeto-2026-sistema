@@ -18,25 +18,22 @@ interface Solicitacao {
   dataEnvio: string;
 }
 
+import { useFirestoreCollection } from "../hooks/useFirestore";
+
 export default function QuantidadeImpressao() {
+  const { data: professoresDB } = useFirestoreCollection<Professor>("professores");
+  const { data: solicitacoes } = useFirestoreCollection<Solicitacao>("xerox_solicitacoes");
   const [professores, setProfessores] = useState<Professor[]>([]);
-  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const limiteCota = 500;
 
   useEffect(() => {
-    // Carregar professores
-    const savedProfs = localStorage.getItem("coordenacao_professores");
-    const profList = savedProfs ? JSON.parse(savedProfs) : [];
-    
-    // Carregar solicitações
-    const savedRequests = localStorage.getItem("xerox_solicitacoes");
-    const requestList = savedRequests ? JSON.parse(savedRequests) : [];
+    if (!professoresDB || !solicitacoes) return;
 
     // Garantir que todos os professores de solicitações constem na lista (caso o login mock crie algum não listado)
     const extraProfs: Professor[] = [];
-    requestList.forEach((req: Solicitacao) => {
-      if (!profList.some((p: Professor) => p.id === req.profId)) {
+    solicitacoes.forEach((req: Solicitacao) => {
+      if (!professoresDB.some((p: Professor) => p.id === req.profId)) {
         if (!extraProfs.some(p => p.id === req.profId)) {
           extraProfs.push({
             id: req.profId,
@@ -47,9 +44,8 @@ export default function QuantidadeImpressao() {
       }
     });
 
-    setProfessores([...profList, ...extraProfs]);
-    setSolicitacoes(requestList);
-  }, []);
+    setProfessores([...professoresDB, ...extraProfs]);
+  }, [professoresDB, solicitacoes]);
 
   const getMonthlyPrintsForProf = (profId: string) => {
     const now = new Date();

@@ -10,63 +10,60 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "./ui/sheet";
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { Bell, Clock, MailOpen, Mail, FileText, Link2, ExternalLink } from "lucide-react";
 import { Button } from "./ui/button";
 import { toast } from "sonner";
 
 export default function ProfessorLayout() {
   const [professor, setProfessor] = useState<any>(null);
+  const { data: todasNotificacoes } = useFirestoreCollection("notificacoes");
   const [notificacoes, setNotificacoes] = useState<any[]>([]);
 
-  const loadNotificacoes = () => {
+  useEffect(() => {
     const sessao = localStorage.getItem("sessao_usuario");
-    if (!sessao) return;
-    const prof = JSON.parse(sessao);
-    setProfessor(prof);
+    if (sessao) {
+      setProfessor(JSON.parse(sessao));
+    }
+  }, []);
 
-    const todas = JSON.parse(localStorage.getItem("coordenacao_notificacoes") || "[]");
+  useEffect(() => {
+    if (!professor || !todasNotificacoes) return;
     
     // Filtrar apenas as destinadas a este professor específico conforme regras de destino
-    const filtradas = todas.filter((n: any) => {
+    const filtradas = todasNotificacoes.filter((n: any) => {
       if (n.alvo === "todos") return true;
-      if (n.alvo === "etapa" && prof.etapaIds?.includes(n.etapaId)) return true;
-      if (n.alvo === "etapa_disciplina" && prof.etapaIds?.includes(n.etapaId) && prof.disciplinaIds?.includes(n.disciplinaId)) return true;
-      if (n.alvo === "professores" && n.profIds?.includes(prof.id)) return true;
+      if (n.alvo === "etapa" && professor.etapaIds?.includes(n.etapaId)) return true;
+      if (n.alvo === "etapa_disciplina" && professor.etapaIds?.includes(n.etapaId) && professor.disciplinaIds?.includes(n.disciplinaId)) return true;
+      if (n.alvo === "professores" && n.profIds?.includes(professor.id)) return true;
       return false;
     });
     setNotificacoes(filtradas);
-  };
-
-  useEffect(() => {
-    loadNotificacoes();
-    
-    // Listener simples para quando o localStorage mudar
-    const handleStorage = () => loadNotificacoes();
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+  }, [professor, todasNotificacoes]);
 
   const unreadCount = notificacoes.filter(
     n => !n.visualizadaPor?.includes(professor?.nome)
   ).length;
 
-  const handleMarcarComoLida = (id: string) => {
+  const handleMarcarComoLida = async (id: string) => {
     if (!professor) return;
-    
-    const todas = JSON.parse(localStorage.getItem("coordenacao_notificacoes") || "[]");
-    const atualizadas = todas.map((n: any) => {
-      if (n.id === id) {
-        const vis = n.visualizadaPor || [];
-        if (!vis.includes(professor.nome)) {
-          return { ...n, visualizadaPor: [...vis, professor.nome] };
-        }
+    try {
+      const notif = todasNotificacoes.find((n: any) => n.id === id);
+      if (!notif) return;
+      const vis = notif.visualizadaPor || [];
+      if (!vis.includes(professor.nome)) {
+        const docRef = doc(db, "notificacoes", id);
+        await updateDoc(docRef, {
+          visualizadaPor: [...vis, professor.nome]
+        });
+        toast.success("Mensagem marcada como visualizada!");
       }
-      return n;
-    });
-    
-    localStorage.setItem("coordenacao_notificacoes", JSON.stringify(atualizadas));
-    loadNotificacoes();
-    toast.success("Mensagem marcada como visualizada!");
+    } catch (err) {
+      console.error("Erro ao marcar comunicado como lido:", err);
+      toast.error("Erro ao atualizar status do comunicado.");
+    }
   };
 
   return (

@@ -1,34 +1,24 @@
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, FolderGit, Library, Printer, UserCheck } from "lucide-react";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState({
-    etapas: 0,
-    turmas: 0,
-    disciplinas: 0,
-    professores: 0,
-    solicitacoesXerox: 0,
-    coordenadores: 0,
-  });
+  const { data: etapas } = useFirestoreCollection("etapas");
+  const { data: turmas } = useFirestoreCollection("turmas");
+  const { data: disciplinas } = useFirestoreCollection("disciplinas");
+  const { data: professores } = useFirestoreCollection("professores");
+  const { data: solicitacoesXerox } = useFirestoreCollection("solicitacoes");
+  const { data: coordenadores } = useFirestoreCollection("coordenadores");
 
-  useEffect(() => {
-    const etapasCount = JSON.parse(localStorage.getItem("coordenacao_etapas") || "[]").length;
-    const turmasCount = JSON.parse(localStorage.getItem("coordenacao_turmas") || "[]").length;
-    const disciplinasCount = JSON.parse(localStorage.getItem("coordenacao_disciplinas") || "[]").length;
-    const professoresCount = JSON.parse(localStorage.getItem("coordenacao_professores") || "[]").length;
-    const xeroxCount = JSON.parse(localStorage.getItem("xerox_solicitacoes") || "[]").length;
-    const coordCount = JSON.parse(localStorage.getItem("coordenacao_coordenadores") || "[]").length;
-
-    setStats({
-      etapas: etapasCount,
-      turmas: turmasCount,
-      disciplinas: disciplinasCount,
-      professores: professoresCount,
-      solicitacoesXerox: xeroxCount,
-      coordenadores: coordCount,
-    });
-  }, []);
+  const stats = {
+    etapas: etapas.length,
+    turmas: turmas.length,
+    disciplinas: disciplinas.length,
+    professores: professores.length,
+    solicitacoesXerox: solicitacoesXerox.length,
+    coordenadores: coordenadores.length,
+  };
 
   return (
     <div className="space-y-6">

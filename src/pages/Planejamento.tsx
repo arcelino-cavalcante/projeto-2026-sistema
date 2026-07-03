@@ -32,6 +32,11 @@ interface PlanoAula {
   fileName?: string;
 }
 
+import { useFirestoreCollection } from "../hooks/useFirestore";
+import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { addDocument } from "../services/firebaseService";
+import { db } from "../firebase";
+
 export default function Planejamento() {
   const [planos, setPlanos] = useState<PlanoAula[]>([]);
   const [professor, setProfessor] = useState<any>(null);
@@ -52,33 +57,43 @@ export default function Planejamento() {
   const [fileName, setFileName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Carregar dados em tempo real do Firestore
+  const { data: etapasDB } = useFirestoreCollection<any>("etapas");
+  const { data: turmasDB } = useFirestoreCollection<any>("turmas");
+  const { data: disciplinasDB } = useFirestoreCollection<any>("disciplinas");
+  const { data: planosDB } = useFirestoreCollection<any>("planejamentos");
+
   useEffect(() => {
-    // Carregar sessão
     const sessao = localStorage.getItem("sessao_usuario");
     if (sessao) {
       const prof = JSON.parse(sessao);
       setProfessor(prof);
-
-      // Carregar todas as turmas, etapas e disciplinas cadastrados
-      const coordEtapas = JSON.parse(localStorage.getItem("coordenacao_etapas") || "[]");
-      const coordTurmas = JSON.parse(localStorage.getItem("coordenacao_turmas") || "[]");
-      const coordDisciplinas = JSON.parse(localStorage.getItem("coordenacao_disciplinas") || "[]");
-
-      setEtapas(coordEtapas.filter((e: any) => prof.etapaIds?.includes(e.id)));
-      setTurmas(coordTurmas.filter((t: any) => prof.etapaIds?.includes(t.etapaId)));
-      setDisciplinas(coordDisciplinas.filter((d: any) => prof.disciplinaIds?.includes(d.id)));
-
       if (prof.etapaIds?.length > 0) {
         setSelectedEtapaId(prof.etapaIds[0]);
       }
     }
-
-    // Carregar planos salvos
-    const savedPlanos = localStorage.getItem("professor_planejamentos");
-    if (savedPlanos) {
-      setPlanos(JSON.parse(savedPlanos));
-    }
   }, []);
+
+  useEffect(() => {
+    if (professor) {
+      if (etapasDB) {
+        setEtapas(etapasDB.filter((e: any) => professor.etapaIds?.includes(e.id)));
+      }
+      if (turmasDB) {
+        setTurmas(turmasDB.filter((t: any) => professor.etapaIds?.includes(t.etapaId)));
+      }
+      if (disciplinasDB) {
+        setDisciplinas(disciplinasDB.filter((d: any) => professor.disciplinaIds?.includes(d.id)));
+      }
+    }
+  }, [professor, etapasDB, turmasDB, disciplinasDB]);
+
+  useEffect(() => {
+    if (planosDB && professor) {
+      const meusPlanos = planosDB.filter((p: any) => p.profId === professor.id);
+      setPlanos(meusPlanos);
+    }
+  }, [planosDB, professor]);
 
   // Filtrar turmas pela etapa selecionada
   const turmasFiltradas = turmas.filter(t => t.etapaId === selectedEtapaId);
@@ -96,11 +111,6 @@ export default function Planejamento() {
       setSelectedDisciplinaId(disciplinas[0].id);
     }
   }, [disciplinas]);
-
-  const savePlanos = (newList: PlanoAula[]) => {
-    setPlanos(newList);
-    localStorage.setItem("professor_planejamentos", JSON.stringify(newList));
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -154,30 +164,25 @@ export default function Planejamento() {
       }
 
       if (editingId) {
-        const updated = planos.map(p =>
-          p.id === editingId ? {
-            ...p,
-            titulo: calculatedTitle,
-            etapaId: selectedEtapaId,
-            etapaNome: etapa.nome,
-            turmaId: selectedTurmaId,
-            turmaNome: turma.nome,
-            disciplinaId: selectedDisciplinaId,
-            disciplinaNome: disc.nome,
-            mes: monthName,
-            bimestre: calculatedBimestre,
-            tipoPlanejamento,
-            dataInicio,
-            dataFim,
-            fileName: nameOfFile
-          } : p
-        );
-        savePlanos(updated);
+        await updateDoc(doc(db, "planejamentos", editingId), {
+          titulo: calculatedTitle,
+          etapaId: selectedEtapaId,
+          etapaNome: etapa.nome,
+          turmaId: selectedTurmaId,
+          turmaNome: turma.nome,
+          disciplinaId: selectedDisciplinaId,
+          disciplinaNome: disc.nome,
+          mes: monthName,
+          bimestre: calculatedBimestre,
+          tipoPlanejamento,
+          dataInicio,
+          dataFim,
+          fileName: nameOfFile
+        });
         setEditingId(null);
         toast.success("Plano de aula atualizado com sucesso!", { id: "plan-upload" });
       } else {
-        const newPlano: PlanoAula = {
-          id: Date.now().toString(),
+        const newPlano = {
           profId: professor?.id || "unknown",
           profNome: professor?.nome || "Professor",
           titulo: calculatedTitle,
@@ -195,7 +200,7 @@ export default function Planejamento() {
           fileName: nameOfFile,
           dataCriacao: new Date().toLocaleDateString("pt-BR")
         };
-        savePlanos([...planos, newPlano]);
+        await addDocument("planejamentos", newPlano);
         toast.success("Novo plano de aula registrado e enviado!", { id: "plan-upload" });
       }
     } catch (err) {
@@ -221,11 +226,15 @@ export default function Planejamento() {
     setPdfFile(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Deseja realmente excluir este plano de aula?")) {
-      const filtered = planos.filter(p => p.id !== id);
-      savePlanos(filtered);
-      toast.success("Plano de aula removido.");
+      try {
+        await deleteDoc(doc(db, "planejamentos", id));
+        toast.success("Plano de aula removido.");
+      } catch (err) {
+        console.error(err);
+        toast.error("Erro ao excluir plano de aula.");
+      }
     }
   };
 
@@ -241,7 +250,7 @@ export default function Planejamento() {
   };
 
   // Filtrar planos do professor ativo
-  const meusPlanos = planos.filter(p => p.profId === professor?.id);
+  const meusPlanos = planos;
 
   return (
     <div className="space-y-6">
