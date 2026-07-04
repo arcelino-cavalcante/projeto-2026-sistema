@@ -37,7 +37,7 @@ export default function BancoAtividades() {
 
   // Carregar dados de sessão e filtros
   useEffect(() => {
-    const sessao = localStorage.getItem("sessao_usuario");
+    const sessao = sessionStorage.getItem("sessao_usuario");
     if (sessao) {
       setProfessor(JSON.parse(sessao));
     }
@@ -211,11 +211,11 @@ export default function BancoAtividades() {
       </div>
 
       <Tabs defaultValue="emergencia" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="emergencia" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 h-auto mb-6 gap-2 sm:gap-0">
+          <TabsTrigger value="emergencia" className="flex items-center gap-2 whitespace-normal h-auto py-2">
             <ShieldAlert className="h-4 w-4" /> Atividades de Emergência
           </TabsTrigger>
-          <TabsTrigger value="exitosas" className="flex items-center gap-2">
+          <TabsTrigger value="exitosas" className="flex items-center gap-2 whitespace-normal h-auto py-2">
             <Award className="h-4 w-4" /> Práticas Exitosas
           </TabsTrigger>
         </TabsList>

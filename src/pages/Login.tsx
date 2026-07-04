@@ -77,7 +77,7 @@ export default function Login() {
         toast.error("Senha de acesso incorreta.");
         return;
       }
-      localStorage.setItem("sessao_usuario", JSON.stringify(prof));
+      sessionStorage.setItem("sessao_usuario", JSON.stringify(prof));
       toast.success("Login do Professor efetuado!");
       navigate("/professor");
     } else if (role === "coordenacao") {
@@ -87,7 +87,7 @@ export default function Login() {
         toast.error("Senha de acesso incorreta.");
         return;
       }
-      localStorage.setItem("sessao_coordenador", JSON.stringify(coord));
+      sessionStorage.setItem("sessao_coordenador", JSON.stringify(coord));
       toast.success("Acesso da Coordenação autorizado!");
       navigate("/coordenacao");
     } else if (role === "impressao") {

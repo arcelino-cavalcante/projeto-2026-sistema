@@ -59,7 +59,7 @@ export default function Impressao() {
   const { data: todasSolicitacoes } = useFirestoreCollection<any>("xerox_solicitacoes");
 
   useEffect(() => {
-    const sessao = localStorage.getItem("sessao_usuario");
+    const sessao = sessionStorage.getItem("sessao_usuario");
     if (sessao) {
       setProfessor(JSON.parse(sessao));
     }
@@ -211,11 +211,11 @@ export default function Impressao() {
       </div>
 
       <Tabs defaultValue="enviar" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-          <TabsTrigger value="enviar" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto mb-6 gap-2 sm:gap-0">
+          <TabsTrigger value="enviar" className="flex items-center gap-2 whitespace-normal h-auto py-2">
             <FileText className="h-4 w-4" /> Enviar Atividade
           </TabsTrigger>
-          <TabsTrigger value="enviados" className="flex items-center gap-2">
+          <TabsTrigger value="enviados" className="flex items-center gap-2 whitespace-normal h-auto py-2">
             <Clock className="h-4 w-4" /> Enviados
             {enviadas.length > 0 && (
               <span className="ml-1 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">
@@ -223,7 +223,7 @@ export default function Impressao() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="impressos" className="flex items-center gap-2">
+          <TabsTrigger value="impressos" className="flex items-center gap-2 whitespace-normal h-auto py-2">
             <CheckCircle2 className="h-4 w-4" /> Impressos
           </TabsTrigger>
         </TabsList>

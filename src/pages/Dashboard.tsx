@@ -32,7 +32,7 @@ export default function Dashboard() {
   const { data: todasSolicitacoes } = useFirestoreCollection<Solicitacao>("xerox_solicitacoes");
 
   useEffect(() => {
-    const sessao = localStorage.getItem("sessao_usuario");
+    const sessao = sessionStorage.getItem("sessao_usuario");
     if (sessao) {
       const prof = JSON.parse(sessao);
       setProfessor(prof);

@@ -66,7 +66,7 @@ export function ProfessorSidebar() {
   const [professor, setProfessor] = useState<any>(null);
 
   useEffect(() => {
-    const sessao = localStorage.getItem("sessao_usuario");
+    const sessao = sessionStorage.getItem("sessao_usuario");
     if (sessao) {
       setProfessor(JSON.parse(sessao));
     }

@@ -104,7 +104,7 @@ export default function MaterialPedagogico() {
 
   useEffect(() => {
     // Carregar dados de sessão
-    const sessao = localStorage.getItem("sessao_usuario");
+    const sessao = sessionStorage.getItem("sessao_usuario");
     if (sessao) {
       const prof = JSON.parse(sessao);
       setProfessor(prof);
@@ -322,11 +322,11 @@ export default function MaterialPedagogico() {
       </div>
 
       <Tabs defaultValue="agendar" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="agendar" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 h-auto mb-6 gap-2 sm:gap-0">
+          <TabsTrigger value="agendar" className="flex items-center gap-2 whitespace-normal h-auto py-2">
             <CalendarIcon className="h-4 w-4" /> Agendar Equipamento
           </TabsTrigger>
-          <TabsTrigger value="solicitar" className="flex items-center gap-2">
+          <TabsTrigger value="solicitar" className="flex items-center gap-2 whitespace-normal h-auto py-2">
             <HardDrive className="h-4 w-4" /> Solicitar Materiais de Projetos
           </TabsTrigger>
         </TabsList>
@@ -450,7 +450,7 @@ export default function MaterialPedagogico() {
 
           {/* Modal de Agendamento Semanal */}
           <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
               <DialogHeader>
                 <DialogTitle>Agendamento Pedagógico Semanal</DialogTitle>
                 <DialogDescription>
@@ -463,7 +463,7 @@ export default function MaterialPedagogico() {
                   {/* Escolha das Aulas */}
                   <div className="space-y-2">
                     <Label className="font-semibold text-gray-700">Selecione a(s) Aula(s):</Label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                       {horarios[currentTurno].map(h => (
                         <div key={h.aula} className="flex items-center space-x-2 border p-2.5 rounded-lg bg-gray-50/50 hover:bg-gray-50 cursor-pointer">
                           <Checkbox
@@ -496,15 +496,15 @@ export default function MaterialPedagogico() {
                               onCheckedChange={() => handleToggleEquipamento(eq)}
                             />
                             <div className="flex-1 flex justify-between items-center">
-                              <label htmlFor={`modal-equip-${eq}`} className="font-medium cursor-pointer flex-1">
+                              <label htmlFor={`modal-equip-${eq}`} className="font-medium cursor-pointer flex-1 text-sm sm:text-base">
                                 {eq}
                               </label>
                               {isReserved ? (
-                                <span className="text-[10px] text-red-600 bg-red-100/50 px-1.5 py-0.5 rounded font-semibold">
+                                <span className="text-[9px] sm:text-[10px] text-red-600 bg-red-100/50 px-1.5 py-0.5 rounded font-semibold text-center leading-tight max-w-[120px]">
                                   Reservado (Aula {ocupadoInfo.aula} por {ocupadoInfo.profNome})
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-green-700 bg-green-100/50 px-1.5 py-0.5 rounded font-semibold">
+                                <span className="text-[10px] text-green-700 bg-green-100/50 px-2 py-0.5 rounded font-semibold">
                                   Livre
                                 </span>
                               )}
@@ -515,32 +515,34 @@ export default function MaterialPedagogico() {
                     </div>
                   </div>
 
-                  {/* Etapa de Ensino */}
-                  <div className="space-y-2">
-                    <Label htmlFor="etapaAgendamento">Selecione a Etapa Relacionada</Label>
-                    <Select value={selectedEtapaId} onValueChange={setSelectedEtapaId}>
-                      <SelectTrigger id="etapaAgendamento" className="bg-white">
-                        <SelectValue placeholder="Escolha a etapa..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {etapas.map(e => (
-                          <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Etapa de Ensino */}
+                    <div className="space-y-2">
+                      <Label htmlFor="etapaAgendamento" className="text-xs sm:text-sm">Selecione a Etapa Relacionada</Label>
+                      <Select value={selectedEtapaId} onValueChange={setSelectedEtapaId}>
+                        <SelectTrigger id="etapaAgendamento" className="bg-white">
+                          <SelectValue placeholder="Escolha a etapa..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {etapas.map(e => (
+                            <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  {/* Professor solicitante */}
-                  <div className="space-y-2">
-                    <Label>Professor Solicitante</Label>
-                    <Input value={professor?.nome || ""} readOnly className="bg-gray-100 font-semibold" />
+                    {/* Professor solicitante */}
+                    <div className="space-y-2">
+                      <Label className="text-xs sm:text-sm">Professor Solicitante</Label>
+                      <Input value={professor?.nome || ""} readOnly className="bg-gray-100 font-semibold" />
+                    </div>
                   </div>
                 </div>
               )}
 
-              <DialogFooter className="pt-4">
-                <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
-                <Button onClick={confirmReserva} disabled={selectedEquipamentos.length === 0 || selectedAulas.length === 0}>
+              <DialogFooter className="pt-4 sm:pt-6 flex-col sm:flex-row gap-2 sm:gap-0">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setModalOpen(false)}>Cancelar</Button>
+                <Button className="w-full sm:w-auto" onClick={confirmReserva} disabled={selectedEquipamentos.length === 0 || selectedAulas.length === 0}>
                   Confirmar Agendamento
                 </Button>
               </DialogFooter>

@@ -64,7 +64,7 @@ export default function Planejamento() {
   const { data: planosDB } = useFirestoreCollection<any>("planejamentos");
 
   useEffect(() => {
-    const sessao = localStorage.getItem("sessao_usuario");
+    const sessao = sessionStorage.getItem("sessao_usuario");
     if (sessao) {
       const prof = JSON.parse(sessao);
       setProfessor(prof);

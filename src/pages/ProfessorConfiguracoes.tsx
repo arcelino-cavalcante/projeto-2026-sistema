@@ -16,7 +16,7 @@ export default function ProfessorConfiguracoes() {
   const [confirmarSenha, setConfirmarSenha] = useState("");
 
   useEffect(() => {
-    const sessao = localStorage.getItem("sessao_usuario");
+    const sessao = sessionStorage.getItem("sessao_usuario");
     if (sessao) {
       setProfessor(JSON.parse(sessao));
     }
@@ -56,7 +56,7 @@ export default function ProfessorConfiguracoes() {
       // 2. Atualizar sessão local do usuário
       const professorAtualizado = { ...professor, senha: novaSenha };
       setProfessor(professorAtualizado);
-      localStorage.setItem("sessao_usuario", JSON.stringify(professorAtualizado));
+      sessionStorage.setItem("sessao_usuario", JSON.stringify(professorAtualizado));
 
       // Resetar campos
       setSenhaAtual("");

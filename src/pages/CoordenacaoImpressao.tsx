@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Eye, FileText, Printer, Calendar, User, Search, Award, TrendingUp, AlertTriangle, Filter, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useFirestoreCollection } from "../hooks/useFirestore";
 
 interface Solicitacao {
   id: string;
@@ -47,11 +48,11 @@ interface EstudantePCD {
 }
 
 export default function CoordenacaoImpressao() {
-  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
-  const [pcdEstudantes, setPcdEstudantes] = useState<EstudantePCD[]>([]);
-  const [professores, setProfessores] = useState<any[]>([]);
-  const [etapas, setEtapas] = useState<any[]>([]);
-  const [disciplinas, setDisciplinas] = useState<any[]>([]);
+  const { data: solicitacoes = [] } = useFirestoreCollection<Solicitacao>("xerox_solicitacoes");
+  const { data: pcdEstudantes = [] } = useFirestoreCollection<EstudantePCD>("pcd_estudantes");
+  const { data: professores = [] } = useFirestoreCollection<any>("professores");
+  const { data: etapas = [] } = useFirestoreCollection<any>("etapas");
+  const { data: disciplinas = [] } = useFirestoreCollection<any>("disciplinas");
 
   // Filtros gerais e pesquisa
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,20 +65,6 @@ export default function CoordenacaoImpressao() {
   // Modal de Visualização (Preview PDF)
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selectedSolicitacao, setSelectedSolicitacao] = useState<Solicitacao | null>(null);
-
-  useEffect(() => {
-    // Carregar todas as solicitações de impressão
-    const salvas = localStorage.getItem("xerox_solicitacoes");
-    if (salvas) {
-      setSolicitacoes(JSON.parse(salvas));
-    }
-
-    // Carregar dados de PCD e auxiliares
-    setPcdEstudantes(JSON.parse(localStorage.getItem("coordenacao_pcd_estudantes") || "[]"));
-    setProfessores(JSON.parse(localStorage.getItem("coordenacao_professores") || "[]"));
-    setEtapas(JSON.parse(localStorage.getItem("coordenacao_etapas") || "[]"));
-    setDisciplinas(JSON.parse(localStorage.getItem("coordenacao_disciplinas") || "[]"));
-  }, []);
 
   // Ordenar solicitações por data de envio (mais recentes primeiro)
   const solicitacoesOrdenadas = [...solicitacoes].sort((a, b) => Number(b.id) - Number(a.id));
